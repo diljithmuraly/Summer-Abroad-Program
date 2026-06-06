@@ -859,7 +859,39 @@ function pgReport(){
     <div class="saved-box" id="saved-rpt"></div>
   </div>`;
 }
-function submitRpt(){const sig=document.getElementById('rpt-sig')?.value||currentUser.name;const box=document.getElementById('saved-rpt');if(box){box.style.display='block';box.innerHTML=`✅ ${currentDay} report submitted at ${new Date().toLocaleTimeString()} by <strong>${sig}</strong>`;}showToast('📊 Submitted to PMO!');}
+async function submitRpt(){
+  const sig=document.getElementById('rpt-sig')?.value||currentUser.name;
+  const count=document.getElementById('rpt-count')?.value||'';
+  const acad=document.getElementById('rpt-acad')?.value||'';
+  const act=document.getElementById('rpt-act')?.value||'';
+  const health=document.getElementById('rpt-health')?.value||'';
+  const inc=document.getElementById('rpt-inc')?.value||'';
+  const tmrw=document.getElementById('rpt-tmrw')?.value||'';
+  const dest=myDest();
+  const btn=document.querySelector('.btn-gold');
+  if(btn){btn.textContent='Submitting...';btn.disabled=true;}
+  try{
+    await supaFetch('daily_reports','POST',{
+      supervisor_name:sig,
+      supervisor_id:currentUser.id,
+      destination:dest?dest.name:'',
+      day:currentDay,
+      student_count:count,
+      academic_sessions:acad,
+      activities:act,
+      health_wellbeing:health,
+      incidents:inc,
+      tomorrow_prep:tmrw
+    });
+    const box=document.getElementById('saved-rpt');
+    if(box){box.style.display='block';box.innerHTML=`✅ ${currentDay} report submitted at ${new Date().toLocaleTimeString()} by <strong>${sig}</strong>`;}
+    showToast('📊 Report saved to database!');
+  }catch(e){
+    showToast('❌ Error saving report: '+e.message);
+  }finally{
+    if(btn){btn.textContent='📤 Submit to PMO';btn.disabled=false;}
+  }
+}
 
 // ═══════════════════════════════════════════════════
 // PM PAGES
@@ -1284,7 +1316,23 @@ function saveEditAnn(i){DB.announcements[i].text=v('an-text')||DB.announcements[
 function deleteAnn(i){DB.announcements.splice(i,1);showToast('Deleted');renderMain();}
 
 function pgReports(){
-  return `<div class="ph"><h1>📊 Reports</h1></div>
+  loadReports();
+  return `<div class="ph"><h1>📊 Supervisor Daily Reports</h1><p>All submitted reports from supervisors</p></div>
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+    <button class="btn btn-primary" onclick="loadReports()">🔄 Refresh</button>
+    <button class="btn" onclick="exportReportsCSV()">⬇ Export CSV</button>
+    <select id="rpt-day-filter" onchange="loadReports()" style="padding:6px 11px;border:1px solid var(--border);border-radius:7px;font-size:0.8rem;font-family:inherit;">
+      <option value="">All Days</option>
+      ${ALL_DAYS.map(d=>`<option value="${d}">${d}</option>`).join('')}
+    </select>
+  </div>
+  <div class="card"><div class="ch" style="cursor:default"><span>📋</span><span class="ct">Submitted Reports</span><span class="cbadge" id="rpt-count-badge">Loading...</span></div>
+  <div class="cb" style="padding:0;overflow-x:auto">
+    <table class="sch-tbl" style="min-width:800px">
+      <thead><tr><th>Supervisor</th><th>Destination</th><th>Day</th><th>Students</th><th>Incidents</th><th>Submitted</th><th></th></tr></thead>
+      <tbody id="rpt-tbody"><tr><td colspan="7" style="text-align:center;padding:20px;color:var(--slate)">Loading reports...</td></tr></tbody>
+    </table>
+  </div></div>
   <div class="stat-grid">
     <div class="sc"><div class="lbl">Reports today</div><div class="val">10</div></div>
     <div class="sc"><div class="lbl">Total reports</div><div class="val">42</div></div>
@@ -1298,6 +1346,70 @@ function pgReports(){
       <button class="btn btn-sm" onclick="showToast('Downloading full — ${d.name}')">⬇ Full</button>
     </div></div>`;}).join('')}</div></div>`;
 }
+
+
+let reportsList=[];
+
+async function loadReports(){
+  const dayFilter=document.getElementById('rpt-day-filter')?.value||'';
+  try{
+    let path='daily_reports?select=*&order=submitted_at.desc';
+    if(dayFilter) path+=`&day=eq.${encodeURIComponent(dayFilter)}`;
+    reportsList=await supaFetch(path);
+    renderReportsTable(reportsList);
+    const badge=document.getElementById('rpt-count-badge');
+    if(badge) badge.textContent=reportsList.length+' reports';
+  }catch(e){
+    const tb=document.getElementById('rpt-tbody');
+    if(tb) tb.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--red)">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function renderReportsTable(list){
+  const tb=document.getElementById('rpt-tbody');
+  if(!tb) return;
+  if(!list.length){tb.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--slate)">No reports submitted yet.</td></tr>';return;}
+  tb.innerHTML=list.map(r=>`<tr>
+    <td style="font-weight:600">${r.supervisor_name}</td>
+    <td>${r.destination||'—'}</td>
+    <td><span class="badge b-gray">${r.day}</span></td>
+    <td style="font-size:0.78rem">${r.student_count||'—'}</td>
+    <td style="font-size:0.78rem;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.incidents||'None'}</td>
+    <td style="font-size:0.75rem;color:var(--slate)">${new Date(r.submitted_at).toLocaleString()}</td>
+    <td><button class="btn btn-sm" onclick="viewReport('${r.id}')">👁 View</button></td>
+  </tr>`).join('');
+}
+
+function viewReport(id){
+  const r=reportsList.find(x=>x.id===id);if(!r)return;
+  openModal(`<h2>📊 Daily Report — ${r.day}</h2>
+    <div class="info-grid" style="margin-bottom:12px">
+      <div class="ii"><div class="il">Supervisor</div><div class="iv">${r.supervisor_name}</div></div>
+      <div class="ii"><div class="il">Destination</div><div class="iv">${r.destination||'—'}</div></div>
+      <div class="ii"><div class="il">Day</div><div class="iv">${r.day}</div></div>
+      <div class="ii"><div class="il">Submitted</div><div class="iv">${new Date(r.submitted_at).toLocaleString()}</div></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="ii"><div class="il">👥 Student Count</div><div class="iv">${r.student_count||'—'}</div></div>
+      <div class="ii"><div class="il">🎓 Academic Sessions</div><div class="iv">${r.academic_sessions||'—'}</div></div>
+      <div class="ii"><div class="il">🏃 Activities</div><div class="iv" style="white-space:pre-wrap">${r.activities||'—'}</div></div>
+      <div class="ii"><div class="il">❤️ Health & Wellbeing</div><div class="iv" style="white-space:pre-wrap">${r.health_wellbeing||'—'}</div></div>
+      <div class="ii"><div class="il">🚨 Incidents</div><div class="iv" style="white-space:pre-wrap">${r.incidents||'None reported'}</div></div>
+      <div class="ii"><div class="il">📋 Tomorrow's Prep</div><div class="iv">${r.tomorrow_prep||'—'}</div></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">Close</button></div>`);
+}
+
+function exportReportsCSV(){
+  if(!reportsList.length){showToast('No reports to export');return;}
+  const rows=[['Supervisor','Destination','Day','Student Count','Academic Sessions','Activities','Health','Incidents','Tomorrow Prep','Submitted']];
+  reportsList.forEach(r=>rows.push([r.supervisor_name,r.destination||'',r.day,r.student_count||'',r.academic_sessions||'',r.activities||'',r.health_wellbeing||'',r.incidents||'',r.tomorrow_prep||'',new Date(r.submitted_at).toLocaleString()]));
+  const csv=rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='reports_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  showToast('✅ Reports exported!');
+}
+
 
 function pgSettings(){
   return `<div class="ph"><h1>⚙️ Settings</h1></div>
