@@ -281,7 +281,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--mist);color:var(--ink);mi
       <label>Password</label>
       <div class="pw-wrap">
         <input type="password" id="login-pass" placeholder="Enter your password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
-        <span class="pw-eye" onclick="togglePw()">👁</span>
+        <span class="pw-eye" onclick="togglePw()" title="Show/hide password" style="font-size:1.1rem;opacity:0.6;transition:opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">👁</span>
       </div>
     </div>
     <button class="login-btn" onclick="doLogin()">Sign In →</button>
@@ -474,7 +474,7 @@ let checkState={},flagState={},feedbackState={},incidentLogs={},visaData={},room
 // ═══════════════════════════════════════════════════
 // LOGIN
 // ═══════════════════════════════════════════════════
-function togglePw(){const i=document.getElementById('login-pass');i.type=i.type==='password'?'text':'password';}
+function togglePw(){const i=document.getElementById('login-pass');const eye=document.querySelector('.pw-eye');const show=i.type==='password';i.type=show?'text':'password';if(eye)eye.textContent=show?'🙈':'👁';}
 
 function doLogin(){
   const uname=document.getElementById('login-user').value.trim();
