@@ -1549,9 +1549,7 @@ function previewCSV(input){
   const reader=new FileReader();
   reader.onload=function(e){
     const text=e.target.result;
-    const lines=text.trim().split(/
-?
-/).filter(l=>l.trim());
+    const lines=text.trim().split(/\n/).filter(l=>l.trim());
     if(lines.length<2){document.getElementById('bulk-err').textContent='CSV must have a header row and at least one student.';return;}
     const headers=lines[0].split(',').map(h=>h.replace(/"/g,'').trim().toLowerCase());
     parsedCSVRows=[];
