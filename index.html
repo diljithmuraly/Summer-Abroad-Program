@@ -1332,13 +1332,20 @@ const SUPA_KEY = 'sb_publishable_bIv6L0aw7cGS2lm4CEqyYA_CBk3CXto';
 async function supaFetch(path, method='GET', body=null){
   const opts = {
     method,
-    headers:{'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY},
+    headers:{
+      'Content-Type':'application/json',
+      'apikey':SUPA_KEY,
+      'Authorization':'Bearer '+SUPA_KEY,
+      'Prefer':'return=representation'
+    },
   };
   if(body) opts.body = JSON.stringify(body);
   const res = await fetch(SUPA_URL+'/rest/v1/'+path, opts);
   if(!res.ok){ const e=await res.text(); throw new Error(e); }
-  if(res.status===204) return null;
-  return res.json();
+  if(res.status===204||res.status===205) return null;
+  const text = await res.text();
+  if(!text||text.trim()==='') return null;
+  return JSON.parse(text);
 }
 
 // ═══════════════════════════════════════════════════
@@ -1414,27 +1421,27 @@ function filterStudents(){
 function openAddStudentModal(){
   openModal(`<h2>🎓 Add New Student</h2>
     <div class="form-row">
-      <div class="fg-n"><label>Full Name</label><input id="sn-name" placeholder="Full name"></div>
+      <div class="fg-n"><label>Full Name *</label><input id="sn-name" placeholder="Full name" style="border-color:var(--border)"></div>
     </div>
     <div class="form-row">
-      <div class="fg-n"><label>Passport Number</label><input id="sn-passport" placeholder="e.g. A12345678"></div>
-      <div class="fg-n"><label>Emirates ID</label><input id="sn-eid" placeholder="784-xxxx-xxxxxxx-x"></div>
+      <div class="fg-n"><label>Passport Number *</label><input id="sn-passport" placeholder="e.g. A12345678"></div>
+      <div class="fg-n"><label>Emirates ID *</label><input id="sn-eid" placeholder="784-xxxx-xxxxxxx-x"></div>
     </div>
     <div class="form-row">
-      <div class="fg-n"><label>Phone</label><input id="sn-phone" placeholder="+971 xx xxx xxxx"></div>
-      <div class="fg-n"><label>Email</label><input id="sn-email" type="email" placeholder="email@example.com"></div>
+      <div class="fg-n"><label>Phone *</label><input id="sn-phone" placeholder="+971 xx xxx xxxx"></div>
+      <div class="fg-n"><label>Email *</label><input id="sn-email" type="email" placeholder="email@example.com"></div>
     </div>
     <div class="form-row">
-      <div class="fg-n"><label>School Name</label><input id="sn-school" placeholder="School name"></div>
+      <div class="fg-n"><label>School Name *</label><input id="sn-school" placeholder="School name"></div>
     </div>
     <hr style="margin:14px 0;border:none;border-top:1px solid var(--border)">
-    <div style="font-size:0.8rem;font-weight:600;color:var(--slate);margin-bottom:10px">📎 GUARDIAN INFO</div>
+    <div style="font-size:0.8rem;font-weight:600;color:var(--slate);margin-bottom:10px">📎 GUARDIAN INFO (optional)</div>
     <div class="form-row">
       <div class="fg-n"><label>Guardian Name</label><input id="sn-gname" placeholder="Parent/Guardian name"></div>
       <div class="fg-n"><label>Guardian Phone</label><input id="sn-gphone" placeholder="+971 xx xxx xxxx"></div>
     </div>
     <hr style="margin:14px 0;border:none;border-top:1px solid var(--border)">
-    <div style="font-size:0.8rem;font-weight:600;color:var(--slate);margin-bottom:10px">📄 DOCUMENTS (paste public URL or upload link)</div>
+    <div style="font-size:0.8rem;font-weight:600;color:var(--slate);margin-bottom:10px">📄 DOCUMENTS — paste public URL (optional)</div>
     <div class="form-row">
       <div class="fg-n"><label>Passport Copy URL</label><input id="sn-doc-passport" placeholder="https://..."></div>
     </div>
@@ -1442,25 +1449,167 @@ function openAddStudentModal(){
       <div class="fg-n"><label>Visa URL</label><input id="sn-doc-visa" placeholder="https://..."></div>
       <div class="fg-n"><label>Photograph URL</label><input id="sn-doc-photo" placeholder="https://..."></div>
     </div>
+    <div id="sn-err" style="color:var(--red);font-size:0.78rem;margin-top:8px;display:none"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveStudent()">Save Student</button>
     </div>`);
 }
 
+function highlightRequired(ids){
+  ids.forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.borderColor=el.value.trim()?'var(--border)':'var(--red)';
+  });
+}
+
 async function saveStudent(){
+  const required=['sn-name','sn-passport','sn-eid','sn-phone','sn-email','sn-school'];
+  required.forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.borderColor=el.value.trim()?'var(--border)':'var(--red)';
+  });
   const name=v('sn-name'),passport=v('sn-passport'),eid=v('sn-eid'),phone=v('sn-phone'),email=v('sn-email'),school=v('sn-school');
-  if(!name||!passport||!eid||!phone||!email||!school){showToast('⚠️ Fill all required fields');return;}
+  if(!name||!passport||!eid||!phone||!email||!school){
+    const errEl=document.getElementById('sn-err');
+    if(errEl){errEl.textContent='⚠️ Please fill all required fields (marked with *)';errEl.style.display='block';}
+    return;
+  }
+  const btn=document.querySelector('.modal .btn-primary');
+  if(btn){btn.textContent='Saving...';btn.disabled=true;}
   try{
-    showToast('Saving...');
-    const [student]=await supaFetch('students','POST',{name,passport_number:passport,emirates_id:eid,phone,email,school_name:school});
+    const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'return=representation'};
+    const res=await fetch(SUPA_URL+'/rest/v1/students',{method:'POST',headers,body:JSON.stringify({name,passport_number:passport,emirates_id:eid,phone,email,school_name:school})});
+    const resText=await res.text();
+    if(!res.ok){
+      let msg=resText;
+      try{const err=JSON.parse(resText);msg=err.message||err.details||resText;}catch(x){}
+      const friendly=msg.includes('passport_number')?'Passport number already exists in the database.':
+                     msg.includes('emirates_id')?'Emirates ID already exists in the database.':
+                     msg.includes('email')?'Email already exists in the database.':msg;
+      const errEl=document.getElementById('sn-err');
+      if(errEl){errEl.textContent='❌ '+friendly;errEl.style.display='block';}
+      if(btn){btn.textContent='Save Student';btn.disabled=false;}
+      return;
+    }
+    const rows=resText&&resText.trim()?JSON.parse(resText):[];
+    const student=rows[0]||null;
+    if(!student){showToast('✅ '+name+' added!');closeModal();loadStudents();return;}
     const sid=student.id;
     const gname=v('sn-gname'),gphone=v('sn-gphone');
     if(gname&&gphone) await supaFetch('guardians','POST',{student_id:sid,name:gname,phone:gphone});
     const pc=v('sn-doc-passport'),vi=v('sn-doc-visa'),ph=v('sn-doc-photo');
     if(pc||vi||ph) await supaFetch('documents','POST',{student_id:sid,passport_copy:pc||null,visa:vi||null,photograph:ph||null});
-    showToast('✅ Student added!');closeModal();loadStudents();
-  }catch(e){showToast('❌ Error: '+e.message);}
+    showToast('✅ '+name+' added successfully!');closeModal();loadStudents();
+  }catch(e){
+    const errEl=document.getElementById('sn-err');
+    if(errEl){errEl.textContent='❌ '+e.message;errEl.style.display='block';}
+    if(btn){btn.textContent='Save Student';btn.disabled=false;}
+  }
+}
+
+// ── BULK UPLOAD ──
+function downloadCSVTemplate(){
+  const csv=`Name,Passport Number,Emirates ID,Phone,Email,School Name,Guardian Name,Guardian Phone
+Ahmed Al Mansouri,A1234567,784-1990-1234567-1,+971501234567,ahmed@example.com,Dubai American Academy,Mohammed Al Mansouri,+971551234567
+Sara Al Rashidi,B7654321,784-2001-7654321-2,+971509876543,sara@example.com,GEMS Wellington,Fatima Al Rashidi,+971559876543`;
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='students_template.csv';a.click();
+  showToast('✅ Template downloaded!');
+}
+
+function openBulkUploadModal(){
+  openModal(`<h2>📤 Bulk Upload Students</h2>
+    <p style="font-size:0.8rem;color:var(--slate);margin-bottom:12px">Upload a CSV file with student data. <button class="btn btn-sm" onclick="downloadCSVTemplate()" style="margin-left:4px">📋 Download Template</button></p>
+    <div style="border:2px dashed var(--border);border-radius:10px;padding:24px;text-align:center;margin-bottom:12px;cursor:pointer" onclick="document.getElementById('csv-file-input').click()">
+      <div style="font-size:2rem;margin-bottom:8px">📂</div>
+      <div style="font-size:0.85rem;color:var(--slate)">Click to select CSV file</div>
+      <div style="font-size:0.72rem;color:var(--green);margin-top:4px" id="csv-filename">No file selected</div>
+      <input type="file" id="csv-file-input" accept=".csv" style="display:none" onchange="previewCSV(this)">
+    </div>
+    <div id="csv-preview" style="display:none">
+      <div style="font-size:0.78rem;font-weight:600;color:var(--slate);margin-bottom:6px">Preview:</div>
+      <div id="csv-preview-table" style="overflow-x:auto;font-size:0.75rem;max-height:180px;overflow-y:auto"></div>
+    </div>
+    <div id="bulk-progress" style="display:none;margin-top:10px">
+      <div class="bar-track"><div class="bar-fill" id="bulk-bar" style="width:0%"></div></div>
+      <div id="bulk-status" style="font-size:0.78rem;color:var(--slate);margin-top:6px;text-align:center"></div>
+    </div>
+    <div id="bulk-err" style="color:var(--red);font-size:0.78rem;margin-top:8px"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="bulk-save-btn" onclick="saveBulkStudents()" disabled>Upload Students</button>
+    </div>`);
+}
+
+let parsedCSVRows=[];
+function previewCSV(input){
+  const file=input.files[0];if(!file)return;
+  document.getElementById('csv-filename').textContent=file.name;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const text=e.target.result;
+    const lines=text.trim().split(/
+?
+/).filter(l=>l.trim());
+    if(lines.length<2){document.getElementById('bulk-err').textContent='CSV must have a header row and at least one student.';return;}
+    const headers=lines[0].split(',').map(h=>h.replace(/"/g,'').trim().toLowerCase());
+    parsedCSVRows=[];
+    for(let i=1;i<lines.length;i++){
+      const cols=lines[i].split(',').map(c=>c.replace(/"/g,'').trim());
+      parsedCSVRows.push({
+        name:cols[headers.indexOf('name')]||'',
+        passport_number:cols[headers.indexOf('passport number')]||'',
+        emirates_id:cols[headers.indexOf('emirates id')]||'',
+        phone:cols[headers.indexOf('phone')]||'',
+        email:cols[headers.indexOf('email')]||'',
+        school_name:cols[headers.indexOf('school name')]||'',
+        guardian_name:cols[headers.indexOf('guardian name')]||'',
+        guardian_phone:cols[headers.indexOf('guardian phone')]||'',
+      });
+    }
+    // Show preview table
+    const previewHtml=`<table class="sch-tbl"><thead><tr><th>#</th><th>Name</th><th>Passport</th><th>Emirates ID</th><th>Email</th><th>School</th></tr></thead><tbody>
+      ${parsedCSVRows.slice(0,5).map((r,i)=>`<tr><td>${i+1}</td><td>${r.name}</td><td>${r.passport_number}</td><td>${r.emirates_id}</td><td>${r.email}</td><td>${r.school_name}</td></tr>`).join('')}
+      ${parsedCSVRows.length>5?`<tr><td colspan="6" style="text-align:center;color:var(--slate)">...and ${parsedCSVRows.length-5} more rows</td></tr>`:''}
+    </tbody></table>`;
+    document.getElementById('csv-preview').style.display='block';
+    document.getElementById('csv-preview-table').innerHTML=previewHtml;
+    document.getElementById('bulk-save-btn').disabled=false;
+    document.getElementById('bulk-save-btn').textContent=`Upload ${parsedCSVRows.length} Students`;
+    document.getElementById('bulk-err').textContent='';
+  };
+  reader.readAsText(file);
+}
+
+async function saveBulkStudents(){
+  if(!parsedCSVRows.length)return;
+  const btn=document.getElementById('bulk-save-btn');
+  btn.disabled=true;
+  document.getElementById('bulk-progress').style.display='block';
+  let success=0,fail=0,errors=[];
+  for(let i=0;i<parsedCSVRows.length;i++){
+    const r=parsedCSVRows[i];
+    const pct=Math.round((i/parsedCSVRows.length)*100);
+    document.getElementById('bulk-bar').style.width=pct+'%';
+    document.getElementById('bulk-status').textContent=`Processing ${i+1} of ${parsedCSVRows.length}...`;
+    if(!r.name||!r.passport_number||!r.emirates_id||!r.phone||!r.email||!r.school_name){
+      fail++;errors.push(`Row ${i+1}: Missing required fields`);continue;
+    }
+    try{
+      const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'return=representation'};
+      const res=await fetch(SUPA_URL+'/rest/v1/students',{method:'POST',headers,body:JSON.stringify({name:r.name,passport_number:r.passport_number,emirates_id:r.emirates_id,phone:r.phone,email:r.email,school_name:r.school_name})});
+      if(!res.ok){const e=await res.json();fail++;errors.push(`Row ${i+1} (${r.name}): ${e.message||e.details}`);continue;}
+      const [student]=await res.json();
+      if(r.guardian_name&&r.guardian_phone) await supaFetch('guardians','POST',{student_id:student.id,name:r.guardian_name,phone:r.guardian_phone}).catch(()=>{});
+      success++;
+    }catch(e){fail++;errors.push(`Row ${i+1}: ${e.message}`);}
+  }
+  document.getElementById('bulk-bar').style.width='100%';
+  document.getElementById('bulk-status').textContent=`Done! ✅ ${success} added, ❌ ${fail} failed.`;
+  if(errors.length) document.getElementById('bulk-err').textContent=errors.slice(0,5).join(' | ')+(errors.length>5?` ...+${errors.length-5} more`:'');
+  showToast(`✅ Bulk upload: ${success} students added`);
+  setTimeout(()=>{closeModal();loadStudents();},2000);
 }
 
 async function deleteStudent(id){
@@ -1501,9 +1650,7 @@ function openViewStudentModal(id){
     </div>
     <div style="font-size:0.78rem;font-weight:600;color:var(--slate);margin-bottom:8px">✈️ FLIGHTS</div>
     ${fRows||'<div style="font-size:0.8rem;color:var(--slate)">No flights added yet.</div>'}
-    <div style="margin-top:12px;display:flex;gap:8px">
-      <button class="btn btn-sm btn-primary" onclick="openAddFlightModal('${s.id}')">+ Add Flight</button>
-    </div>
+    <div style="margin-top:12px"><button class="btn btn-sm btn-primary" onclick="openAddFlightModal('${s.id}')">+ Add Flight</button></div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">Close</button></div>`);
 }
 
@@ -1541,8 +1688,7 @@ function openAddFlightModal(studentId){
 async function saveFlight(studentId){
   try{
     await supaFetch('flights','POST',{
-      student_id:studentId,
-      direction:v('fl-dir'),airline:v('fl-airline'),flight_number:v('fl-fno'),
+      student_id:studentId,direction:v('fl-dir'),airline:v('fl-airline'),flight_number:v('fl-fno'),
       departure_airport:v('fl-dep'),arrival_airport:v('fl-arr'),
       departure_date:v('fl-depdt')||null,arrival_date:v('fl-arrdt')||null,
       seat_number:v('fl-seat'),baggage_allowance:v('fl-bag'),transit_airport:v('fl-transit')||null
@@ -1560,6 +1706,7 @@ function exportStudentsCSV(){
   a.download='students_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
   showToast('✅ CSV exported!');
 }
+
 
 </script>
 </body>
