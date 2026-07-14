@@ -575,6 +575,17 @@ function renderMain(){
 function myDest(){return DB.destinations.find(d=>d.id===currentUser.destId);}
 function myStudents(){return USERS.filter(u=>u.role==='student'&&u.destId===currentUser.destId);}
 function destStudents(did){return USERS.filter(u=>u.role==='student'&&u.destId===did);}
+let realDestCounts=null; // {destId: count} from live Supabase students table
+async function loadRealDestCounts(){
+  try{
+    const rows=await supaFetch('students?select=destination_id');
+    const counts={};
+    rows.forEach(r=>{ if(r.destination_id) counts[r.destination_id]=(counts[r.destination_id]||0)+1; });
+    realDestCounts=counts;
+    if(currentSection==='destinations') renderMain();
+  }catch(e){ /* leave realDestCounts null → falls back silently */ }
+}
+function realCountFor(destId){ return realDestCounts && realDestCounts[destId]!==undefined ? realDestCounts[destId] : 0; }
 function lookupByUID(val){return USERS.find(u=>(u.uid&&u.uid.toLowerCase()===val.trim().toLowerCase())||u.name.toLowerCase().includes(val.trim().toLowerCase()));}
 
 // ═══════════════════════════════════════════════════
@@ -1025,12 +1036,13 @@ function pgSupervisors(){
 // ADMIN PAGES
 // ═══════════════════════════════════════════════════
 function pgDestinations(){
+  if(realDestCounts===null) loadRealDestCounts();
   const cards=DB.destinations.map(d=>`<div class="dest-card ${selectedDest===d.id?'sel':''}" onclick="selectedDest=${d.id};renderMain()">
     <div style="font-size:1.6rem">${d.flag}</div><div style="font-size:0.88rem;font-weight:600;color:var(--green)">${d.name}</div>
     <div style="font-size:0.68rem;color:var(--slate);margin-top:2px">${d.country} · ${d.program}</div>
     <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">
       <span class="badge ${d.flightStatus==='Confirmed'?'b-green':d.flightStatus==='Delayed'?'b-red':'b-amber'}" style="font-size:0.63rem">${d.flightStatus}</span>
-      <span class="badge b-gray" style="font-size:0.63rem">${destStudents(d.id).length} students</span>
+      <span class="badge b-gray" style="font-size:0.63rem">${realDestCounts===null?'…':realCountFor(d.id)} / ${d.students||0} added</span>
     </div>
   </div>`).join('');
   const sel=DB.destinations.find(d=>d.id===selectedDest);
@@ -1044,7 +1056,7 @@ function pgDestinations(){
   </div>
   <div class="cb" style="padding:13px 15px"><div class="info-grid">
     <div class="ii"><div class="il">University / Program</div><div class="iv">${sel.university||sel.program}</div></div>
-    <div class="ii"><div class="il">Cohort</div><div class="iv">${sel.gender||'—'} · ${sel.students||0} students (target) · ${sel.supervisorsCount||0} supervisors</div></div>
+    <div class="ii"><div class="il">Cohort</div><div class="iv">${sel.gender||'—'} · ${realCountFor(sel.id)} added / ${sel.students||0} target · ${sel.supervisorsCount||0} supervisors</div></div>
     <div class="ii"><div class="il">Supervisors assigned</div><div class="iv">${selSups.map(s=>s.name).join(', ')||'None assigned'}</div></div>
     <div class="ii"><div class="il">Flight dates</div><div class="iv">${sel.flightDates||'—'}</div></div>
     <div class="ii"><div class="il">Outbound flight</div><div class="iv">${sel.flightNo} — ${sel.departureAirport}→${sel.arrivalAirport} · ${sel.departure} → ${sel.arrival}</div></div>
@@ -1679,7 +1691,7 @@ async function saveStudent(){
     if(gname&&gphone) await supaFetch('guardians','POST',{student_id:sid,name:gname,phone:gphone});
     const pc=v('sn-doc-passport'),vi=v('sn-doc-visa'),ph=v('sn-doc-photo');
     if(pc||vi||ph) await supaFetch('documents','POST',{student_id:sid,passport_copy:pc||null,visa:vi||null,photograph:ph||null});
-    showToast('✅ '+name+' added successfully!');closeModal();loadStudents();
+    showToast('✅ '+name+' added successfully!');closeModal();loadStudents();realDestCounts=null;
   }catch(e){
     const errEl=document.getElementById('sn-err');
     if(errEl){errEl.textContent='❌ '+e.message;errEl.style.display='block';}
@@ -1802,7 +1814,7 @@ async function saveBulkStudents(){
   document.getElementById('bulk-bar').style.width='100%';
   document.getElementById('bulk-status').textContent=`Done! ✅ ${success} added, ❌ ${fail} failed.`;
   if(errors.length) document.getElementById('bulk-err').textContent=errors.slice(0,5).join(' | ')+(errors.length>5?` ...+${errors.length-5} more`:'');
-  showToast(`✅ Bulk upload: ${success} students added`);
+  showToast(`✅ Bulk upload: ${success} students added`);realDestCounts=null;
   setTimeout(()=>{closeModal();loadStudents();},2000);
 }
 
@@ -1813,7 +1825,7 @@ async function deleteStudent(id){
     await supaFetch('guardians?student_id=eq.'+id,'DELETE');
     await supaFetch('flights?student_id=eq.'+id,'DELETE');
     await supaFetch('students?id=eq.'+id,'DELETE');
-    showToast('✅ Student deleted');loadStudents();
+    showToast('✅ Student deleted');loadStudents();realDestCounts=null;
   }catch(e){showToast('❌ Error: '+e.message);}
 }
 
