@@ -475,6 +475,19 @@ const ALL_DAYS=['Day 0','Day 1','Day 2','Day 3','Day 4','Day 5','Day 6','Day 7',
 
 // State
 let USERS=[...CREDS];
+let membersLoaded=false;
+async function loadMembersFromSupabase(){
+  try{
+    const rows=await supaFetch('members?select=*&order=created_at.asc');
+    (rows||[]).forEach(r=>{
+      // skip if a member with this username is already present (avoids dupes on re-run)
+      if(USERS.some(u=>u.username.toLowerCase()===r.username.toLowerCase())) return;
+      USERS.push({id:'mem_'+r.id,username:r.username,password:r.password,name:r.name,role:r.role,destId:r.destination_id||0,uid:r.uid,teamLead:!!r.team_lead,initials:r.initials||(r.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase())});
+    });
+  }catch(e){ /* Supabase members table may not exist yet — fails silently, demo accounts still work */ }
+  membersLoaded=true;
+}
+loadMembersFromSupabase();
 let currentUser=null,currentSection='',currentDay='Day 1',selectedDest=1;
 let checkState={},flagState={},feedbackState={},incidentLogs={},visaData={},roomNumbers={},feedbackSubmittedDays={};
 
@@ -1255,6 +1268,7 @@ function saveNewDest(){
 }
 function deleteDest(id){if(confirm('Delete this destination?')){const idx=DB.destinations.findIndex(d=>d.id===id);if(idx>-1)DB.destinations.splice(idx,1);selectedDest=DB.destinations[0]?.id||1;showToast('Deleted');renderMain();}}
 
+let selectedMemberIds=new Set();
 function pgMembers(){
   if(!window._mf)window._mf='all';
   if(window._mfd===undefined)window._mfd=0;
@@ -1265,10 +1279,13 @@ function pgMembers(){
   let filtered=USERS.filter(u=>window._mf==='all'||u.role===window._mf);
   if(window._mfd>0)filtered=filtered.filter(u=>u.destId===window._mfd);
   if(window._msearch.length>1)filtered=filtered.filter(u=>u.name.toLowerCase().includes(window._msearch.toLowerCase())||u.username.toLowerCase().includes(window._msearch.toLowerCase())||(u.uid&&u.uid.toLowerCase().includes(window._msearch.toLowerCase())));
-  return `<div class="ph"><h1>👥 Members</h1></div>
+  window._lastRenderedMemberIds=filtered.map(u=>u.id);
+  return `<div class="ph"><h1>👥 Members</h1><p>Supervisors, Team Leaders, Calista PMO & Super Admin accounts</p></div>
   <div style="display:flex;gap:7px;margin-bottom:11px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-primary" onclick="openAddMemberModal()">+ Add Member</button>
+    <button class="btn" onclick="openBulkUploadMembersModal()">📤 Bulk Upload</button>
     <button class="btn" onclick="exportCreds()">⬇ Credentials CSV</button>
+    <button class="btn btn-danger" id="mem-bulkdel-btn" onclick="bulkDeleteMembers()" style="display:none">🗑 Delete Selected (<span id="mem-bulkdel-count">0</span>)</button>
     <select style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:0.79rem;font-family:inherit;background:white;cursor:pointer"
       onchange="window._mfd=parseInt(this.value);renderMain()">${destOpts}</select>
     <input placeholder="🔍 Search name / username / UID…" value="${window._msearch}"
@@ -1277,10 +1294,11 @@ function pgMembers(){
   </div>
   <div class="section-pills">${pills}</div>
   <div class="card"><div class="ch" style="cursor:default"><span>👥</span><span class="ct">Members (${filtered.length})</span></div>
-  <div class="cb" style="padding:0"><table class="tbl" style="table-layout:fixed;width:100%">
-    <thead><tr><th style="width:24%">Name</th><th style="width:13%">UID</th><th style="width:13%">Username</th><th style="width:16%">Destination</th><th style="width:8%">Role</th><th style="width:10%">Password</th><th style="width:16%">Actions</th></tr></thead>
+  <div class="cb" style="padding:0;overflow-x:auto"><table class="tbl" style="table-layout:fixed;width:100%;min-width:800px">
+    <thead><tr><th style="width:26px"><input type="checkbox" onchange="toggleAllMembers(this.checked)"></th><th style="width:22%">Name</th><th style="width:12%">UID</th><th style="width:12%">Username</th><th style="width:15%">Destination</th><th style="width:9%">Role</th><th style="width:9%">Password</th><th style="width:15%">Actions</th></tr></thead>
     <tbody>${filtered.map(u=>{const d=u.destId?DB.destinations.find(x=>x.id===u.destId):null;
       return `<tr>
+        <td><input type="checkbox" ${selectedMemberIds.has(u.id)?'checked':''} onchange="toggleMemberSelect('${u.id}',this.checked)"></td>
         <td><div style="display:flex;align-items:center;gap:6px"><div class="mav" style="width:25px;height:25px;font-size:0.64rem">${u.initials||'??'}</div><span style="font-size:0.79rem">${u.name}</span></div></td>
         <td><span class="uid-badge">${u.uid||'—'}</span></td>
         <td style="font-size:0.74rem;font-family:monospace">${u.username}</td>
@@ -1294,11 +1312,120 @@ function pgMembers(){
       </tr>`;}).join('')}
     </tbody></table></div></div>`;
 }
+function toggleAllMembers(checked){
+  const ids=window._lastRenderedMemberIds||[];
+  if(checked) ids.forEach(id=>selectedMemberIds.add(id));
+  else ids.forEach(id=>selectedMemberIds.delete(id));
+  renderMain();
+}
+function toggleMemberSelect(id,checked){
+  if(checked) selectedMemberIds.add(id); else selectedMemberIds.delete(id);
+  const btn=document.getElementById('mem-bulkdel-btn'); const cnt=document.getElementById('mem-bulkdel-count');
+  if(cnt) cnt.textContent=selectedMemberIds.size;
+  if(btn) btn.style.display=selectedMemberIds.size>0?'inline-flex':'none';
+}
+async function bulkDeleteMembers(){
+  if(!selectedMemberIds.size) return;
+  const ids=[...selectedMemberIds];
+  const names=ids.map(id=>USERS.find(u=>u.id===id)?.name).filter(Boolean).join(', ');
+  if(!confirm(`Permanently delete ${ids.length} member(s)?\n\n${names}`)) return;
+  const realDbIds=ids.filter(id=>id.startsWith('mem_')).map(id=>id.replace('mem_',''));
+  if(realDbIds.length){
+    try{ await supaFetch('members?id=in.('+realDbIds.join(',')+')','DELETE'); }
+    catch(e){ showToast('⚠️ Some database deletes failed: '+e.message); }
+  }
+  ids.forEach(id=>{ const idx=USERS.findIndex(u=>u.id===id); if(idx>-1) USERS.splice(idx,1); });
+  selectedMemberIds.clear();
+  showToast(`✅ ${ids.length} member(s) deleted`);
+  renderMain();
+}
 function exportCreds(){
   const rows=USERS.map(u=>`${u.name},${u.username},${u.password},${u.role},${u.uid||''},${u.destId||''}`).join('\n');
   const csv='Name,Username,Password,Role,UID,DestID\n'+rows;
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='meccademia_credentials.csv';a.click();
   showToast('✅ Credentials exported as CSV');
+}
+
+// ═══════════════════════════════════════════════════
+// BULK UPLOAD — MEMBERS (Supervisors / Team Leaders / Calista PMO)
+// ═══════════════════════════════════════════════════
+let parsedMemberRows=[];
+function openBulkUploadMembersModal(){
+  parsedMemberRows=[];
+  openModal(`<h2>📤 Bulk Upload Members</h2>
+    <p style="font-size:0.8rem;color:var(--slate);margin-bottom:10px">Upload supervisors, team leaders, or Calista PMO staff from a CSV file.</p>
+    <button class="btn btn-sm" onclick="downloadMemberCSVTemplate()" style="margin-bottom:12px">⬇ Download CSV Template</button>
+    <input type="file" id="mem-csv-file" accept=".csv" onchange="handleMemberCSVUpload(this)" style="margin-bottom:12px;font-size:0.8rem">
+    <div id="mem-csv-preview"></div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="mem-bulk-submit-btn" onclick="saveBulkMembers()" style="display:none">Upload All</button></div>`);
+}
+function downloadMemberCSVTemplate(){
+  const csv=`Name,Role,Team Lead,Destination,Username,Password
+Ahmed Al Mansouri,Supervisor,Yes,China — Male,ahmed.mansouri,Sup@2026
+Fatima Al Zaabi,Supervisor,No,China — Male,fatima.zaabi,Sup@2026
+Mohammed Al Rashid,Calista PMO,,,mohammed.pmo,Pmo@2026`;
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='members_template.csv';a.click();
+}
+function handleMemberCSVUpload(input){
+  const file=input.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const text=e.target.result;
+    const lines=text.split(/\r?\n/).filter(l=>l.trim());
+    const headers=lines[0].split(',').map(h=>h.trim().toLowerCase());
+    parsedMemberRows=[];
+    for(let i=1;i<lines.length;i++){
+      const cols=lines[i].split(',').map(c=>c.trim().replace(/^"|"$/g,''));
+      parsedMemberRows.push({
+        name:cols[headers.indexOf('name')]||'',
+        role:(cols[headers.indexOf('role')]||'').toLowerCase(),
+        teamLead:/^y/i.test(cols[headers.indexOf('team lead')]||''),
+        destination:cols[headers.indexOf('destination')]||'',
+        username:cols[headers.indexOf('username')]||'',
+        password:cols[headers.indexOf('password')]||'',
+      });
+    }
+    const roleMap={'supervisor':'supervisor','team lead':'supervisor','calista pmo':'pm','pmo':'pm','pm':'pm','super admin':'admin','admin':'admin'};
+    const preview=`<table class="sch-tbl"><thead><tr><th>#</th><th>Name</th><th>Role</th><th>Team Lead</th><th>Destination</th><th>Username</th></tr></thead><tbody>
+      ${parsedMemberRows.slice(0,8).map((r,i)=>{
+        const role=roleMap[r.role]||'';
+        const destId=r.destination?resolveDestId(r.destination):null;
+        return `<tr><td>${i+1}</td><td>${r.name}</td><td>${role?role:`<span style="color:var(--red)">⚠️ unknown role "${r.role}"</span>`}</td><td>${r.teamLead?'👑 Yes':'No'}</td><td>${role==='supervisor'?(destId?destNameById(destId):`<span style="color:var(--red)">⚠️ no match</span>`):'—'}</td><td>${r.username}</td></tr>`;
+      }).join('')}
+      ${parsedMemberRows.length>8?`<tr><td colspan="6" style="text-align:center;color:var(--slate)">...and ${parsedMemberRows.length-8} more</td></tr>`:''}
+    </tbody></table>`;
+    document.getElementById('mem-csv-preview').innerHTML=preview;
+    document.getElementById('mem-bulk-submit-btn').style.display='inline-flex';
+  };
+  reader.readAsText(file);
+}
+async function saveBulkMembers(){
+  const roleMap={'supervisor':'supervisor','team lead':'supervisor','calista pmo':'pm','pmo':'pm','pm':'pm','super admin':'admin','admin':'admin'};
+  let success=0,fail=0; const errors=[];
+  const btn=document.getElementById('mem-bulk-submit-btn');
+  if(btn){btn.textContent='Uploading...';btn.disabled=true;}
+  for(let i=0;i<parsedMemberRows.length;i++){
+    const r=parsedMemberRows[i];
+    const role=roleMap[r.role];
+    if(!r.name||!role){ fail++; errors.push(`Row ${i+1}: missing name or unrecognized role`); continue; }
+    const destId=role==='supervisor'&&r.destination?resolveDestId(r.destination):null;
+    const uname=r.username||r.name.toLowerCase().replace(/[^a-z]+/g,'.');
+    if(USERS.some(u=>u.username.toLowerCase()===uname.toLowerCase())){ fail++; errors.push(`Row ${i+1} (${r.name}): username "${uname}" already exists`); continue; }
+    const pass=r.password||'Temp@1234';
+    const parts=r.name.split(' ');const init=parts[0][0]+(parts[parts.length-1][0]||'');
+    const prefix={supervisor:'SUP',pm:'PMO',admin:'ADM'}[role];
+    const uid=prefix+String(USERS.filter(u=>u.role===role).length+1+success).padStart(4,'0');
+    try{
+      const rows=await supaFetch('members','POST',{name:r.name,role,team_lead:r.teamLead,destination_id:destId,username:uname,password:pass,uid,initials:init});
+      const newId=rows&&rows[0]?'mem_'+rows[0].id:'usr'+Date.now()+i;
+      USERS.push({id:newId,name:r.name,role,destId:destId||0,username:uname,password:pass,initials:init,uid,teamLead:r.teamLead});
+      success++;
+    }catch(e){ fail++; errors.push(`Row ${i+1} (${r.name}): ${e.message}`); }
+  }
+  showToast(`✅ Bulk upload: ${success} added${fail?`, ${fail} failed`:''}`);
+  if(errors.length) console.warn('Bulk member upload issues:',errors);
+  closeModal();renderMain();
 }
 
 function openAddMemberModal(){
@@ -1314,17 +1441,26 @@ function openAddMemberModal(){
     <div class="modal-footer"><button class="btn" onclick="closeModal()">Cancel</button>
     <button class="btn btn-primary" onclick="saveNewMember()">Add Member</button></div>`);
 }
-function saveNewMember(){
+async function saveNewMember(){
   const name=v('am-name');if(!name){showToast('Name required');return;}
-  const role=v('am-role')||'student';const destId=parseInt(v('am-dest'))||0;
+  const role=v('am-role')||'student';
+  if(role==='student'){ showToast('⚠️ Please add students from the Students page instead — they need cohort + document fields.'); return; }
+  const destId=parseInt(v('am-dest'))||0;
   const teamLead=document.getElementById('am-teamlead')?.value==='true';
-  const uname=v('am-uname')||(role==='student'?'STU'+String(USERS.filter(u=>u.role==='student').length+1).padStart(4,'0'):name.toLowerCase().replace(/ /g,'.'));
+  const uname=v('am-uname')||name.toLowerCase().replace(/[^a-z]+/g,'.');
   const pass=v('am-pass')||'Temp@1234';
   const parts=name.split(' ');const init=parts[0][0]+(parts[parts.length-1][0]||'');
-  const prefix={student:'STU',supervisor:'SUP',pm:'PMO',admin:'ADM'}[role];
+  const prefix={supervisor:'SUP',pm:'PMO',admin:'ADM'}[role];
   const uid=v('am-uid')||(prefix+String(USERS.filter(u=>u.role===role).length+1).padStart(4,'0'));
-  USERS.push({id:'usr'+Date.now(),name,role,destId,username:uname,password:pass,initials:init,uid,teamLead});
-  showToast('✅ '+name+' added!');closeModal();renderMain();
+  if(USERS.some(u=>u.username.toLowerCase()===uname.toLowerCase())){ showToast('⚠️ Username already exists'); return; }
+  try{
+    const rows=await supaFetch('members','POST',{name,role,team_lead:teamLead,destination_id:destId||null,username:uname,password:pass,uid,initials:init});
+    const newId=rows&&rows[0]?'mem_'+rows[0].id:'usr'+Date.now();
+    USERS.push({id:newId,name,role,destId,username:uname,password:pass,initials:init,uid,teamLead});
+    showToast('✅ '+name+' added!');closeModal();renderMain();
+  }catch(e){
+    showToast('❌ Error saving: '+e.message);
+  }
 }
 function openEditMember(id){
   const u=USERS.find(x=>x.id===id);if(!u)return;
@@ -1340,7 +1476,7 @@ function openEditMember(id){
     <div class="modal-footer"><button class="btn" onclick="closeModal()">Cancel</button>
     <button class="btn btn-primary" onclick="saveEditMember('${id}')">Save</button></div>`);
 }
-function saveEditMember(id){
+async function saveEditMember(id){
   const u=USERS.find(x=>x.id===id);if(!u)return;
   u.name=v('em-name')||u.name; u.role=v('em-role')||u.role;
   const tlEl=document.getElementById('em-teamlead'); if(tlEl) u.teamLead=(tlEl.value==='true');
@@ -1349,8 +1485,30 @@ function saveEditMember(id){
   u.uid=v('em-uid')||u.uid;
   const parts=u.name.split(' ');u.initials=parts[0][0]+(parts[parts.length-1][0]||'');
   showToast('✅ '+u.name+' updated!');closeModal();renderMain();
+  if(u.role!=='student'){
+    try{
+      if(id.startsWith('mem_')){
+        const realId=id.replace('mem_','');
+        await supaFetch('members?id=eq.'+realId,'PATCH',{name:u.name,role:u.role,team_lead:!!u.teamLead,destination_id:u.destId||null,username:u.username,password:u.password,uid:u.uid,initials:u.initials});
+      }else{
+        // legacy hardcoded demo account — persist it as a real record from now on so edits survive a refresh
+        const rows=await supaFetch('members','POST',{name:u.name,role:u.role,team_lead:!!u.teamLead,destination_id:u.destId||null,username:u.username,password:u.password,uid:u.uid,initials:u.initials});
+        if(rows&&rows[0]) u.id='mem_'+rows[0].id;
+      }
+    }catch(e){ showToast('⚠️ Saved locally, but sync to database failed: '+e.message); }
+  }
 }
-function deleteMember(id){if(confirm('Remove this member?')){const idx=USERS.findIndex(u=>u.id===id);if(idx>-1)USERS.splice(idx,1);showToast('Member removed');renderMain();}}
+async function deleteMember(id){
+  const u=USERS.find(x=>x.id===id);
+  if(!u||!confirm('Remove '+u.name+'?')) return;
+  const idx=USERS.findIndex(x=>x.id===id);
+  if(idx>-1)USERS.splice(idx,1);
+  if(id.startsWith('mem_')){
+    try{ await supaFetch('members?id=eq.'+id.replace('mem_',''),'DELETE'); }
+    catch(e){ showToast('⚠️ Removed locally, but database delete failed: '+e.message); }
+  }
+  showToast('Member removed');renderMain();
+}
 
 function pgFlightsVisa(){
   return `<div class="ph"><h1>✈️ Flights & Visas</h1></div>
@@ -1663,6 +1821,7 @@ async function supaFetch(path, method='GET', body=null){
 // STUDENTS PAGE
 // ═══════════════════════════════════════════════════
 let studentsList=[];
+let selectedStudentIds=new Set();
 
 function pgStudents(){
   loadStudents();
@@ -1672,14 +1831,15 @@ function pgStudents(){
     <button class="btn btn-primary" onclick="openAddStudentModal()">+ Add Student</button>
     <button class="btn" onclick="openBulkUploadModal()">📤 Bulk Upload</button>
     <button class="btn" onclick="exportStudentsCSV()">⬇ Export CSV</button>
+    <button class="btn btn-danger" id="stu-bulkdel-btn" onclick="bulkDeleteStudents()" style="display:none">🗑 Delete Selected (<span id="stu-bulkdel-count">0</span>)</button>
     <select id="stu-dest-filter" onchange="filterStudents()" style="padding:6px 11px;border:1px solid var(--border);border-radius:7px;font-size:0.8rem;font-family:inherit"><option value="">All cohorts</option>${destOpts}</select>
     <input id="stu-search" placeholder="🔍 Search..." style="padding:6px 11px;border:1px solid var(--border);border-radius:7px;font-size:0.8rem;font-family:inherit;flex:1;min-width:140px;" oninput="filterStudents()">
   </div>
   <div class="card"><div class="ch" style="cursor:default"><span>👥</span><span class="ct">All Students</span><span class="cbadge" id="stu-count">Loading...</span></div>
   <div class="cb" style="padding:0;overflow-x:auto">
-    <table class="sch-tbl" style="min-width:780px">
-      <thead><tr><th>Name</th><th>Cohort</th><th>Passport No.</th><th>Emirates ID</th><th>Phone</th><th>Email</th><th>School</th><th>Docs</th><th></th></tr></thead>
-      <tbody id="stu-tbody"><tr><td colspan="9" style="text-align:center;padding:20px;color:var(--slate)">Loading students...</td></tr></tbody>
+    <table class="sch-tbl" style="min-width:820px">
+      <thead><tr><th style="width:30px"><input type="checkbox" id="stu-select-all" onchange="toggleAllStudents(this.checked)"></th><th>Name</th><th>Cohort</th><th>Passport No.</th><th>Emirates ID</th><th>Phone</th><th>Email</th><th>School</th><th>Docs</th><th></th></tr></thead>
+      <tbody id="stu-tbody"><tr><td colspan="10" style="text-align:center;padding:20px;color:var(--slate)">Loading students...</td></tr></tbody>
     </table>
   </div></div>`;
 }
@@ -1693,20 +1853,52 @@ async function loadStudents(){
     if(el) el.textContent=studentsList.length+' students';
   } catch(e){
     const tb=document.getElementById('stu-tbody');
-    if(tb) tb.innerHTML=`<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--red)">Error loading: ${e.message}</td></tr>`;
+    if(tb) tb.innerHTML=`<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--red)">Error loading: ${e.message}</td></tr>`;
   }
+}
+function toggleAllStudents(checked){
+  const visibleIds=(window._lastRenderedStudentIds||[]);
+  if(checked) visibleIds.forEach(id=>selectedStudentIds.add(id));
+  else visibleIds.forEach(id=>selectedStudentIds.delete(id));
+  renderStudentTable(window._lastRenderedStudentList||studentsList);
+  updateBulkDeleteBtn();
+}
+function toggleStudentSelect(id,checked){
+  if(checked) selectedStudentIds.add(id); else selectedStudentIds.delete(id);
+  updateBulkDeleteBtn();
+}
+function updateBulkDeleteBtn(){
+  const btn=document.getElementById('stu-bulkdel-btn'); const cnt=document.getElementById('stu-bulkdel-count');
+  if(cnt) cnt.textContent=selectedStudentIds.size;
+  if(btn) btn.style.display=selectedStudentIds.size>0?'inline-flex':'none';
+}
+async function bulkDeleteStudents(){
+  if(!selectedStudentIds.size) return;
+  if(!confirm(`Permanently delete ${selectedStudentIds.size} student(s)? This cannot be undone.`)) return;
+  const ids=[...selectedStudentIds];
+  try{
+    await supaFetch('students?id=in.('+ids.join(',')+')','DELETE');
+    showToast(`✅ ${ids.length} student(s) deleted`);
+  }catch(e){
+    showToast('❌ Error deleting: '+e.message);
+  }
+  selectedStudentIds.clear();
+  loadStudents();
 }
 
 function renderStudentTable(list){
   const tb=document.getElementById('stu-tbody');
   if(!tb) return;
-  if(!list.length){tb.innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--slate)">No students yet. Click + Add Student.</td></tr>';return;}
+  window._lastRenderedStudentList=list;
+  window._lastRenderedStudentIds=list.map(s=>s.id);
+  if(!list.length){tb.innerHTML='<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--slate)">No students yet. Click + Add Student.</td></tr>';return;}
   tb.innerHTML=list.map(s=>{
     const docs=s.documents&&s.documents[0]||{};
     const hasPassport=docs.passport_copy?'✅':'❌';
     const hasVisa=docs.visa?'✅':'❌';
     const hasPhoto=docs.photograph?'✅':'❌';
     return `<tr>
+      <td><input type="checkbox" ${selectedStudentIds.has(s.id)?'checked':''} onchange="toggleStudentSelect('${s.id}',this.checked)"></td>
       <td style="font-weight:600">${s.name}</td>
       <td style="font-size:0.78rem;white-space:nowrap">${destNameById(s.destination_id)}</td>
       <td style="font-family:monospace;font-size:0.78rem">${s.passport_number}</td>
@@ -1721,6 +1913,7 @@ function renderStudentTable(list){
       </div></td>
     </tr>`;
   }).join('');
+  updateBulkDeleteBtn();
 }
 
 function filterStudents(){
