@@ -484,7 +484,6 @@ async function loadMembersFromSupabase(){
   membersLoaded=true;
 }
 loadMembersFromSupabase().then(restoreSession);
-restoreSession();
 let currentUser=null,currentSection='',currentDay='Day 1',selectedDest=1;
 let checkState={},flagState={},feedbackState={},incidentLogs={},visaData={},roomNumbers={},feedbackSubmittedDays={};
 
