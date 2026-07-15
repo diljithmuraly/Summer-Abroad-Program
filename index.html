@@ -1606,7 +1606,43 @@ function pgFeedbackAdmin(){
   <div class="cb" style="padding:14px 16px">
     <div style="font-size:0.75rem;color:var(--slate);margin-bottom:8px">This is exactly what supervisors see on each student row.</div>
     <div>${preview}</div>
+  </div></div>
+  ${renderMilestonePopupPanel()}`;
+}
+function renderMilestonePopupPanel(){
+  const todayStr=new Date().toISOString().slice(0,10);
+  const rows=DB.destinations.map(d=>{
+    const triggers=buildFeedbackTriggers(d.id);
+    if(!triggers.length) return `<div style="padding:9px 16px;border-bottom:1px solid var(--border);font-size:0.78rem;color:var(--slate)">${d.flag} <strong>${d.name}</strong> — no itinerary uploaded yet, milestone popups inactive</div>`;
+    const items=triggers.map(t=>{
+      const due=t.date<=todayStr;
+      return `<span style="display:inline-flex;align-items:center;gap:5px;margin:2px 8px 2px 0;padding:3px 9px;border-radius:12px;font-size:0.71rem;background:${due?'var(--green-pale)':'var(--mist)'};color:${due?'var(--green)':'var(--slate)'}">
+        ${t.icon} ${t.title} — ${new Date(t.date+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'})} ${due?'(live now)':'(not yet due)'}
+        <button class="btn btn-sm" style="padding:1px 7px;font-size:0.68rem" onclick="previewMilestonePopup('${t.key}',${JSON.stringify(t.icon)},${JSON.stringify(t.title)},${JSON.stringify(t.question)})">🧪 Preview</button>
+      </span>`;
+    }).join('');
+    return `<div style="padding:9px 16px;border-bottom:1px solid var(--border)">
+      <div style="font-size:0.8rem;font-weight:600;color:var(--green);margin-bottom:5px">${d.flag} ${d.name}</div>
+      <div>${items}</div>
+    </div>`;
+  }).join('');
+  return `<div class="card" style="margin-top:6px"><div class="ch" style="cursor:default"><span>🔔</span><span class="ct">Automatic milestone feedback popups</span></div>
+  <div class="cb" style="padding:0 0 4px">
+    <div style="padding:10px 16px;font-size:0.76rem;color:var(--slate);border-bottom:1px solid var(--border)">
+      Students & supervisors get asked these automatically at login, based on each cohort's real itinerary dates — not manually triggered. Today is <strong>${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</strong>, so anything marked "not yet due" simply hasn't reached its date yet. Use 🧪 Preview to see the popup itself without waiting.
+    </div>
+    ${rows}
   </div></div>`;
+}
+function previewMilestonePopup(key,icon,title,question){
+  fbRating=0;
+  openModal(`<h2>${icon} ${title} <span style="font-size:0.7rem;color:var(--slate);font-weight:400">(preview — not saved)</span></h2>
+    <p style="color:var(--slate);font-size:0.85rem;margin-bottom:14px">${question}</p>
+    <div style="display:flex;gap:8px;font-size:1.9rem;margin-bottom:14px;cursor:pointer">
+      ${[1,2,3,4,5].map(n=>`<span onclick="selectFbRating(${n})" id="fb-star-${n}">☆</span>`).join('')}
+    </div>
+    <textarea placeholder="Any comments? (optional)" style="width:100%;min-height:70px;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:0.85rem;box-sizing:border-box"></textarea>
+    <div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-primary" onclick="closeModal()">Close preview</button></div>`);
 }
 function addFeedbackType(){
   const name=prompt('New tag name:','New Tag');
