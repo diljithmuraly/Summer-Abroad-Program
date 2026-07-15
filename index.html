@@ -317,7 +317,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--mist);color:var(--ink);mi
   </div>
 </div>
 
-<div class="modal-bg" id="modal-bg" style="display:none" onclick="closeModalBg(event)">
+<div class="modal-bg" id="modal-bg" style="display:none" onmousedown="closeModalBg(event)" onclick="closeModalBg(event)">
   <div class="modal" id="modal-box"></div>
 </div>
 <div class="toast" id="toast"></div>
@@ -347,11 +347,7 @@ const DB = {
     {id:12,name:'Republic of Indonesia — Female',country:'Republic of Indonesia',gender:'Female',flag:'🇮🇩',program:'University of Indonesia',university:'University of Indonesia',students:26,supervisorsCount:3,flightDates:'01–14 Aug 2026',flightNo:'EY 472',departure:'Aug 1, 2026 08:55',arrival:'Aug 1, 2026 20:35',departureAirport:'DXB',arrivalAirport:'CGK',returnFlightNo:'EY 475',returnDeparture:'Aug 14, 2026 18:10',returnArrival:'Aug 14, 2026 23:05',accommodation:'TBC',flightStatus:'Pending',visaStatus:'Pending',supervisorIds:['sup12']},
     {id:13,name:'Canada — Male',country:'Canada',gender:'Male',flag:'🇨🇦',program:'Toronto Metropolitan University',university:'Toronto Metropolitan University',students:30,supervisorsCount:3,flightDates:'26 Jul–09 Aug 2026',flightNo:'EK 241',departure:'Jul 26, 2026 03:15',arrival:'Jul 26, 2026 09:30',departureAirport:'DXB',arrivalAirport:'YYZ',returnFlightNo:'EK 242',returnDeparture:'Aug 9, 2026 14:55',returnArrival:'Aug 10, 2026 11:40',accommodation:'TBC',flightStatus:'Pending',visaStatus:'Pending',supervisorIds:['sup13']},
   ],
-  announcements:[
-    {id:'a1',text:'Breakfast change tomorrow — starts 06:45 AM due to early departure.',time:'Today 8:30 PM',destId:0},
-    {id:'a2',text:'Please be at the lobby by 07:50 AM sharp. No delays tolerated.',time:'Today 7:00 PM',destId:0},
-    {id:'a3',text:'All students must verify emergency contacts with supervisor tonight.',time:'Today 2:15 PM',destId:0},
-  ],
+  announcements:[],
   schedule:[
     {time:'06:30 AM',activity:'Wake up & morning prep',type:'info'},
     {time:'07:00 AM',activity:'Breakfast — hotel dining hall',type:'meal'},
@@ -487,7 +483,8 @@ async function loadMembersFromSupabase(){
   }catch(e){ /* Supabase members table may not exist yet — fails silently, demo accounts still work */ }
   membersLoaded=true;
 }
-loadMembersFromSupabase();
+loadMembersFromSupabase().then(restoreSession);
+restoreSession();
 let currentUser=null,currentSection='',currentDay='Day 1',selectedDest=1;
 let checkState={},flagState={},feedbackState={},incidentLogs={},visaData={},roomNumbers={},feedbackSubmittedDays={};
 
@@ -496,6 +493,18 @@ let checkState={},flagState={},feedbackState={},incidentLogs={},visaData={},room
 // ═══════════════════════════════════════════════════
 function togglePw(){const i=document.getElementById('login-pass');const eye=document.querySelector('.pw-eye');const show=i.type==='password';i.type=show?'text':'password';if(eye)eye.textContent=show?'🙈':'👁';}
 
+function loginAs(user){
+  currentUser=user;
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='flex';
+  document.getElementById('nav-av').textContent=user.initials||user.name.split(' ').map(w=>w[0]).join('').slice(0,2);
+  document.getElementById('nav-name').textContent=user.name;
+  document.getElementById('nav-role').textContent={admin:'Super Admin',pm:'Calista PMO',supervisor:user.teamLead?'Team Leader':'Supervisor',student:'Student'}[user.role];
+  if(user.destId)selectedDest=user.destId;
+  try{ localStorage.setItem('calista_session_uname',user.username); }catch(e){}
+  initDash();
+  checkFeedbackPopups();
+}
 function doLogin(){
   const uname=document.getElementById('login-user').value.trim();
   const pass=document.getElementById('login-pass').value;
@@ -504,15 +513,15 @@ function doLogin(){
   const user=USERS.find(u=>u.username.toLowerCase()===uname.toLowerCase()&&u.password===pass);
   if(!user){errEl.textContent='Incorrect username or password. Please try again.';return;}
   errEl.textContent='';
-  currentUser=user;
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('app').style.display='flex';
-  document.getElementById('nav-av').textContent=user.initials||user.name.split(' ').map(w=>w[0]).join('').slice(0,2);
-  document.getElementById('nav-name').textContent=user.name;
-  document.getElementById('nav-role').textContent={admin:'Super Admin',pm:'Calista PMO',supervisor:user.teamLead?'Team Leader':'Supervisor',student:'Student'}[user.role];
-  if(user.destId)selectedDest=user.destId;
-  initDash();
-  checkFeedbackPopups();
+  loginAs(user);
+}
+function restoreSession(){
+  if(currentUser) return; // already logged in this tab, don't disturb
+  let saved=null;
+  try{ saved=localStorage.getItem('calista_session_uname'); }catch(e){}
+  if(!saved) return;
+  const user=USERS.find(u=>u.username.toLowerCase()===saved.toLowerCase());
+  if(user) loginAs(user);
 }
 
 function doLogout(){
@@ -522,6 +531,7 @@ function doLogout(){
   document.getElementById('login-user').value='';
   document.getElementById('login-pass').value='';
   document.getElementById('login-error').textContent='';
+  try{ localStorage.removeItem('calista_session_uname'); }catch(e){}
 }
 
 // ═══════════════════════════════════════════════════
@@ -694,12 +704,29 @@ function pgItinerary(){
   return renderItineraryFor(d?d.id:selectedDest);
 }
 
-function pgAnnouncements(){
+let announcementsList=[];
+async function loadAnnouncements(){
+  try{
+    announcementsList=await supaFetch('announcements?select=*&order=created_at.desc');
+  }catch(e){
+    announcementsList=[]; // table may not exist yet — shows "no announcements" rather than erroring
+  }
+  renderAnnouncementsList();
+}
+function renderAnnouncementsList(){
+  const el=document.getElementById('ann-list');
+  if(!el) return;
   const d=myDest();
-  const anns=DB.announcements.filter(a=>a.destId===0||(d&&a.destId===d.id));
+  const anns=(announcementsList||[]).filter(a=>!a.destination_id||(d&&a.destination_id===d.id));
+  el.innerHTML=anns.length
+    ? anns.map(a=>`<div class="ann"><div class="at">${a.text}</div><div class="atm">🕐 ${a.time_label||new Date(a.created_at).toLocaleString()}</div></div>`).join('')
+    : `<div style="padding:14px;color:var(--slate);font-size:0.82rem;text-align:center">No announcements yet.</div>`;
+}
+function pgAnnouncements(){
+  loadAnnouncements();
   return `<div class="ph"><h1>📣 Announcements</h1></div>
   <div class="card"><div class="ch" style="cursor:default"><span>🔔</span><span class="ct">Latest announcements</span></div>
-  <div class="cb" style="padding:12px 15px">${anns.map(a=>`<div class="ann"><div class="at">${a.text}</div><div class="atm">🕐 ${a.time}</div></div>`).join('')}</div></div>`;
+  <div class="cb" id="ann-list" style="padding:12px 15px;color:var(--slate);font-size:0.82rem">Loading…</div></div>`;
 }
 
 function pgTravel(){
@@ -1295,10 +1322,10 @@ function pgMembers(){
   <div class="section-pills">${pills}</div>
   <div class="card"><div class="ch" style="cursor:default"><span>👥</span><span class="ct">Members (${filtered.length})</span></div>
   <div class="cb" style="padding:0;overflow-x:auto"><table class="tbl" style="table-layout:fixed;width:100%;min-width:800px">
-    <thead><tr><th style="width:26px"><input type="checkbox" onchange="toggleAllMembers(this.checked)"></th><th style="width:22%">Name</th><th style="width:12%">UID</th><th style="width:12%">Username</th><th style="width:15%">Destination</th><th style="width:9%">Role</th><th style="width:9%">Password</th><th style="width:15%">Actions</th></tr></thead>
-    <tbody>${filtered.map(u=>{const d=u.destId?DB.destinations.find(x=>x.id===u.destId):null;
+    <thead><tr><th style="width:26px"><input type="checkbox" id="mem-select-all" onchange="toggleAllMembers(this.checked)"></th><th style="width:22%">Name</th><th style="width:12%">UID</th><th style="width:12%">Username</th><th style="width:15%">Destination</th><th style="width:9%">Role</th><th style="width:9%">Password</th><th style="width:15%">Actions</th></tr></thead>
+    <tbody id="mem-tbody">${filtered.map(u=>{const d=u.destId?DB.destinations.find(x=>x.id===u.destId):null;
       return `<tr>
-        <td><input type="checkbox" ${selectedMemberIds.has(u.id)?'checked':''} onchange="toggleMemberSelect('${u.id}',this.checked)"></td>
+        <td><input type="checkbox" class="mem-row-cb" data-id="${u.id}" ${selectedMemberIds.has(u.id)?'checked':''} onchange="toggleMemberSelect('${u.id}',this.checked)"></td>
         <td><div style="display:flex;align-items:center;gap:6px"><div class="mav" style="width:25px;height:25px;font-size:0.64rem">${u.initials||'??'}</div><span style="font-size:0.79rem">${u.name}</span></div></td>
         <td><span class="uid-badge">${u.uid||'—'}</span></td>
         <td style="font-size:0.74rem;font-family:monospace">${u.username}</td>
@@ -1316,10 +1343,18 @@ function toggleAllMembers(checked){
   const ids=window._lastRenderedMemberIds||[];
   if(checked) ids.forEach(id=>selectedMemberIds.add(id));
   else ids.forEach(id=>selectedMemberIds.delete(id));
-  renderMain();
+  document.querySelectorAll('#mem-tbody .mem-row-cb').forEach(cb=>{ cb.checked=checked; });
+  updateBulkDeleteBtnMembers();
 }
 function toggleMemberSelect(id,checked){
   if(checked) selectedMemberIds.add(id); else selectedMemberIds.delete(id);
+  const ids=window._lastRenderedMemberIds||[];
+  const allSelected=ids.length>0&&ids.every(x=>selectedMemberIds.has(x));
+  const selAll=document.getElementById('mem-select-all');
+  if(selAll) selAll.checked=allSelected;
+  updateBulkDeleteBtnMembers();
+}
+function updateBulkDeleteBtnMembers(){
   const btn=document.getElementById('mem-bulkdel-btn'); const cnt=document.getElementById('mem-bulkdel-count');
   if(cnt) cnt.textContent=selectedMemberIds.size;
   if(btn) btn.style.display=selectedMemberIds.size>0?'inline-flex':'none';
@@ -1611,14 +1646,17 @@ function pgFeedbackAdmin(){
 }
 function renderMilestonePopupPanel(){
   const todayStr=new Date().toISOString().slice(0,10);
+  window._previewTriggers=[];
   const rows=DB.destinations.map(d=>{
     const triggers=buildFeedbackTriggers(d.id);
     if(!triggers.length) return `<div style="padding:9px 16px;border-bottom:1px solid var(--border);font-size:0.78rem;color:var(--slate)">${d.flag} <strong>${d.name}</strong> — no itinerary uploaded yet, milestone popups inactive</div>`;
     const items=triggers.map(t=>{
       const due=t.date<=todayStr;
+      const idx=window._previewTriggers.length;
+      window._previewTriggers.push(t);
       return `<span style="display:inline-flex;align-items:center;gap:5px;margin:2px 8px 2px 0;padding:3px 9px;border-radius:12px;font-size:0.71rem;background:${due?'var(--green-pale)':'var(--mist)'};color:${due?'var(--green)':'var(--slate)'}">
         ${t.icon} ${t.title} — ${new Date(t.date+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'})} ${due?'(live now)':'(not yet due)'}
-        <button class="btn btn-sm" style="padding:1px 7px;font-size:0.68rem" onclick="previewMilestonePopup('${t.key}',${JSON.stringify(t.icon)},${JSON.stringify(t.title)},${JSON.stringify(t.question)})">🧪 Preview</button>
+        <button class="btn btn-sm" style="padding:1px 7px;font-size:0.68rem" onclick="previewMilestonePopup(${idx})">🧪 Preview</button>
       </span>`;
     }).join('');
     return `<div style="padding:9px 16px;border-bottom:1px solid var(--border)">
@@ -1634,10 +1672,12 @@ function renderMilestonePopupPanel(){
     ${rows}
   </div></div>`;
 }
-function previewMilestonePopup(key,icon,title,question){
+function previewMilestonePopup(idx){
+  const t=window._previewTriggers&&window._previewTriggers[idx];
+  if(!t) return;
   fbRating=0;
-  openModal(`<h2>${icon} ${title} <span style="font-size:0.7rem;color:var(--slate);font-weight:400">(preview — not saved)</span></h2>
-    <p style="color:var(--slate);font-size:0.85rem;margin-bottom:14px">${question}</p>
+  openModal(`<h2>${t.icon} ${t.title} <span style="font-size:0.7rem;color:var(--slate);font-weight:400">(preview — not saved)</span></h2>
+    <p style="color:var(--slate);font-size:0.85rem;margin-bottom:14px">${t.question}</p>
     <div style="display:flex;gap:8px;font-size:1.9rem;margin-bottom:14px;cursor:pointer">
       ${[1,2,3,4,5].map(n=>`<span onclick="selectFbRating(${n})" id="fb-star-${n}">☆</span>`).join('')}
     </div>
@@ -1674,16 +1714,28 @@ function setFeedbackNeg(i,isNeg){
 }
 
 function pgAnnouncementsAdmin(){
-  return `<div class="ph"><h1>📣 Announcements</h1></div>
+  loadAnnouncementsAdmin();
+  return `<div class="ph"><h1>📣 Announcements</h1><p>These are what students & supervisors actually see — nothing shows until you add one.</p></div>
   <div class="card"><div class="ch" style="cursor:default"><span>📣</span><span class="ct">Current Announcements</span>
     <button class="btn btn-sm btn-primary" onclick="openAddAnnModal()" style="margin-left:auto">+ Add</button>
   </div>
-  <div class="cb">${DB.announcements.map((a,i)=>`<div style="display:flex;align-items:flex-start;gap:9px;padding:10px 15px;border-bottom:1px solid var(--border)">
+  <div class="cb" id="ann-admin-list" style="padding:14px 16px;color:var(--slate);font-size:0.82rem">Loading…</div></div>`;
+}
+async function loadAnnouncementsAdmin(){
+  try{
+    announcementsList=await supaFetch('announcements?select=*&order=created_at.desc');
+  }catch(e){
+    announcementsList=[];
+  }
+  const el=document.getElementById('ann-admin-list');
+  if(!el) return;
+  if(!announcementsList.length){ el.innerHTML='<div style="text-align:center;padding:10px">No announcements yet — click + Add to create one.</div>'; return; }
+  el.innerHTML=announcementsList.map(a=>`<div style="display:flex;align-items:flex-start;gap:9px;padding:10px 0;border-bottom:1px solid var(--border)">
     <div style="flex:1"><div style="font-size:0.82rem;font-weight:500">${a.text}</div>
-    <div style="font-size:0.68rem;color:var(--slate);margin-top:2px">${a.time} · ${a.destId===0?'All destinations':DB.destinations.find(d=>d.id===a.destId)?.name||'—'}</div></div>
-    <button class="btn btn-sm" onclick="openEditAnnModal(${i})">✏️</button>
-    <button class="btn btn-sm btn-danger" onclick="deleteAnn(${i})">🗑</button>
-  </div>`).join('')}</div></div>`;
+    <div style="font-size:0.68rem;color:var(--slate);margin-top:2px">${a.time_label||new Date(a.created_at).toLocaleString()} · ${!a.destination_id?'All destinations':DB.destinations.find(d=>d.id===a.destination_id)?.name||'—'}</div></div>
+    <button class="btn btn-sm" onclick="openEditAnnModal('${a.id}')">✏️</button>
+    <button class="btn btn-sm btn-danger" onclick="deleteAnn('${a.id}')">🗑</button>
+  </div>`).join('');
 }
 function openAddAnnModal(){
   const dests=DB.destinations.map(d=>`<option value="${d.id}">${d.flag} ${d.name}</option>`).join('');
@@ -1694,19 +1746,38 @@ function openAddAnnModal(){
     <div class="modal-footer"><button class="btn" onclick="closeModal()">Cancel</button>
     <button class="btn btn-primary" onclick="saveNewAnn()">Add</button></div>`);
 }
-function saveNewAnn(){const text=v('an-text');if(!text){showToast('Text required');return;}DB.announcements.unshift({id:'a'+Date.now(),text,time:v('an-time')||'Now',destId:parseInt(v('an-dest'))||0});showToast('✅ Added');closeModal();renderMain();}
-function openEditAnnModal(i){
-  const a=DB.announcements[i];
-  const dests=DB.destinations.map(d=>`<option value="${d.id}" ${a.destId===d.id?'selected':''}>${d.flag} ${d.name}</option>`).join('');
+async function saveNewAnn(){
+  const text=v('an-text');if(!text){showToast('Text required');return;}
+  const destId=parseInt(v('an-dest'))||0;
+  try{
+    await supaFetch('announcements','POST',{text,time_label:v('an-time')||'Now',destination_id:destId||null});
+    showToast('✅ Added');closeModal();loadAnnouncementsAdmin();
+  }catch(e){ showToast('❌ Error: '+e.message); }
+}
+function openEditAnnModal(id){
+  const a=announcementsList.find(x=>x.id==id);if(!a)return;
+  const dests=DB.destinations.map(d=>`<option value="${d.id}" ${a.destination_id===d.id?'selected':''}>${d.flag} ${d.name}</option>`).join('');
   openModal(`<h2>✏️ Edit Announcement</h2>
     <div class="form-row"><div class="fg-n"><label>Message</label><textarea id="an-text" style="min-height:80px">${a.text}</textarea></div></div>
-    <div class="form-row"><div class="fg-n"><label>Destination</label><select id="an-dest"><option value="0" ${a.destId===0?'selected':''}>All destinations</option>${dests}</select></div>
-    <div class="fg-n"><label>Time</label><input id="an-time" value="${a.time}"></div></div>
+    <div class="form-row"><div class="fg-n"><label>Destination</label><select id="an-dest"><option value="0" ${!a.destination_id?'selected':''}>All destinations</option>${dests}</select></div>
+    <div class="fg-n"><label>Time</label><input id="an-time" value="${a.time_label||''}"></div></div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-primary" onclick="saveEditAnn(${i})">Save</button></div>`);
+    <button class="btn btn-primary" onclick="saveEditAnn('${id}')">Save</button></div>`);
 }
-function saveEditAnn(i){DB.announcements[i].text=v('an-text')||DB.announcements[i].text;DB.announcements[i].time=v('an-time')||DB.announcements[i].time;DB.announcements[i].destId=parseInt(v('an-dest'))||0;showToast('✅ Updated');closeModal();renderMain();}
-function deleteAnn(i){DB.announcements.splice(i,1);showToast('Deleted');renderMain();}
+async function saveEditAnn(id){
+  const destId=parseInt(v('an-dest'))||0;
+  try{
+    await supaFetch('announcements?id=eq.'+id,'PATCH',{text:v('an-text'),time_label:v('an-time'),destination_id:destId||null});
+    showToast('✅ Updated');closeModal();loadAnnouncementsAdmin();
+  }catch(e){ showToast('❌ Error: '+e.message); }
+}
+async function deleteAnn(id){
+  if(!confirm('Delete this announcement?')) return;
+  try{
+    await supaFetch('announcements?id=eq.'+id,'DELETE');
+    showToast('Deleted');loadAnnouncementsAdmin();
+  }catch(e){ showToast('❌ Error: '+e.message); }
+}
 
 function pgReports(){
   loadReports();
@@ -1820,7 +1891,15 @@ function pgSettings(){
 // MODAL + TOAST
 function openModal(html){document.getElementById('modal-box').innerHTML=html;document.getElementById('modal-bg').style.display='flex';}
 function closeModal(){document.getElementById('modal-bg').style.display='none';}
-function closeModalBg(e){if(e.target===document.getElementById('modal-bg'))closeModal();}
+let _modalMouseDownOnBg=false;
+function closeModalBg(e){
+  // only close if BOTH mousedown and mouseup happened directly on the backdrop —
+  // prevents an accidental close when a user drags to select text inside a field
+  // and releases the mouse outside it (very easy to trigger while typing/editing)
+  if(e.type==='mousedown'){ _modalMouseDownOnBg=(e.target===document.getElementById('modal-bg')); return; }
+  if(e.type==='click'&&_modalMouseDownOnBg&&e.target===document.getElementById('modal-bg')) closeModal();
+  _modalMouseDownOnBg=false;
+}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 
 // SET LOGOS
@@ -1896,11 +1975,15 @@ function toggleAllStudents(checked){
   const visibleIds=(window._lastRenderedStudentIds||[]);
   if(checked) visibleIds.forEach(id=>selectedStudentIds.add(id));
   else visibleIds.forEach(id=>selectedStudentIds.delete(id));
-  renderStudentTable(window._lastRenderedStudentList||studentsList);
+  document.querySelectorAll('#stu-tbody .stu-row-cb').forEach(cb=>{ cb.checked=checked; });
   updateBulkDeleteBtn();
 }
 function toggleStudentSelect(id,checked){
   if(checked) selectedStudentIds.add(id); else selectedStudentIds.delete(id);
+  const ids=window._lastRenderedStudentIds||[];
+  const allSelected=ids.length>0&&ids.every(x=>selectedStudentIds.has(x));
+  const selAll=document.getElementById('stu-select-all');
+  if(selAll) selAll.checked=allSelected;
   updateBulkDeleteBtn();
 }
 function updateBulkDeleteBtn(){
@@ -1934,7 +2017,7 @@ function renderStudentTable(list){
     const hasVisa=docs.visa?'✅':'❌';
     const hasPhoto=docs.photograph?'✅':'❌';
     return `<tr>
-      <td><input type="checkbox" ${selectedStudentIds.has(s.id)?'checked':''} onchange="toggleStudentSelect('${s.id}',this.checked)"></td>
+      <td><input type="checkbox" class="stu-row-cb" data-id="${s.id}" ${selectedStudentIds.has(s.id)?'checked':''} onchange="toggleStudentSelect('${s.id}',this.checked)"></td>
       <td style="font-weight:600">${s.name}</td>
       <td style="font-size:0.78rem;white-space:nowrap">${destNameById(s.destination_id)}</td>
       <td style="font-family:monospace;font-size:0.78rem">${s.passport_number}</td>
