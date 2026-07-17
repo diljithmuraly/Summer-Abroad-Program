@@ -2247,6 +2247,16 @@ function pgFeedbackAdmin(){
   <div class="card" style="margin-top:6px"><div class="ch" style="cursor:default"><span>📋</span><span class="ct">Submitted student feedback</span><span class="cbadge" id="fb-admin-count">Loading...</span>
     <button class="btn btn-sm" onclick="exportFeedbackCSV()" style="margin-left:8px">⬇ Export CSV</button>
   </div>
+  <div class="cb" style="padding:12px 16px 0;display:flex;gap:8px;flex-wrap:wrap">
+    <select id="fb-admin-dest-filter" onchange="renderFeedbackAdminTable()" style="padding:6px 11px;border:1px solid var(--border);border-radius:7px;font-size:0.8rem;font-family:inherit">
+      <option value="">All destinations</option>
+      ${DB.destinations.map(d=>`<option value="${d.id}">${d.flag} ${d.name}</option>`).join('')}
+    </select>
+    <select id="fb-admin-day-filter" onchange="renderFeedbackAdminTable()" style="padding:6px 11px;border:1px solid var(--border);border-radius:7px;font-size:0.8rem;font-family:inherit">
+      <option value="">All days</option>
+      ${ALL_DAYS.map(dy=>`<option value="${dy}">${dy}</option>`).join('')}
+    </select>
+  </div>
   <div class="cb" style="padding:0;overflow-x:auto">
     <table class="sch-tbl" style="min-width:800px">
       <thead><tr><th>Day</th><th>Destination</th><th>Supervisor</th><th>Students flagged</th><th>Submitted</th><th></th></tr></thead>
@@ -2259,34 +2269,49 @@ let adminFeedbackList=[];
 async function loadSubmittedFeedbackForAdmin(){
   try{
     adminFeedbackList=await supaFetch('daily_feedback?select=*&order=day.desc');
-    const tb=document.getElementById('fb-admin-tbody');
-    const badge=document.getElementById('fb-admin-count');
-    if(badge) badge.textContent=(adminFeedbackList||[]).length+' submissions';
-    if(!tb) return;
-    if(!adminFeedbackList||!adminFeedbackList.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--slate)">No feedback submitted yet.</td></tr>'; return; }
-    tb.innerHTML=adminFeedbackList.map((r,i)=>{
-      let summary={};
-      try{ summary=JSON.parse(r.feedback||'{}'); }catch(e){}
-      const flaggedCount=Object.keys(summary).length;
-      const when=r.submitted_at||r.created_at;
-      return `<tr>
-        <td><span class="badge b-gray">${r.day||'—'}</span></td>
-        <td style="font-size:0.78rem">${r.destination||'—'}</td>
-        <td style="font-size:0.78rem">${r.supervisor_name||'—'}</td>
-        <td style="font-size:0.78rem">${flaggedCount}</td>
-        <td style="font-size:0.72rem;color:var(--slate);white-space:nowrap">${when?new Date(when).toLocaleString():'—'}</td>
-        <td><button class="btn btn-sm" onclick="viewSubmittedFeedback(${i})">👁 View</button></td>
-      </tr>`;
-    }).join('');
+    renderFeedbackAdminTable();
   }catch(e){
     const tb=document.getElementById('fb-admin-tbody');
     if(tb) tb.innerHTML=`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--red)">Error loading feedback: ${e.message}</td></tr>`;
   }
 }
+// Applies the destination + day filters — used by both the on-screen table
+// and the CSV export, so what you see is always what you download. This
+// matters once every cohort and every day's feedback is in the system at
+// once, rather than just a handful of test rows.
+function getFilteredAdminFeedback(){
+  const destId=document.getElementById('fb-admin-dest-filter')?.value;
+  const day=document.getElementById('fb-admin-day-filter')?.value;
+  const destName=destId?DB.destinations.find(d=>d.id===parseInt(destId))?.name:null;
+  return (adminFeedbackList||[]).filter(r=>(!destName||r.destination===destName)&&(!day||r.day===day));
+}
+function renderFeedbackAdminTable(){
+  const tb=document.getElementById('fb-admin-tbody');
+  const badge=document.getElementById('fb-admin-count');
+  const list=getFilteredAdminFeedback();
+  if(badge) badge.textContent=list.length+' of '+(adminFeedbackList||[]).length+' submissions';
+  if(!tb) return;
+  if(!list.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--slate)">No feedback matches this filter.</td></tr>'; return; }
+  tb.innerHTML=list.map(r=>{
+    let summary={};
+    try{ summary=JSON.parse(r.feedback||'{}'); }catch(e){}
+    const flaggedCount=Object.keys(summary).length;
+    const when=r.submitted_at||r.created_at;
+    return `<tr>
+      <td><span class="badge b-gray">${r.day||'—'}</span></td>
+      <td style="font-size:0.78rem">${r.destination||'—'}</td>
+      <td style="font-size:0.78rem">${r.supervisor_name||'—'}</td>
+      <td style="font-size:0.78rem">${flaggedCount}</td>
+      <td style="font-size:0.72rem;color:var(--slate);white-space:nowrap">${when?new Date(when).toLocaleString():'—'}</td>
+      <td><button class="btn btn-sm" onclick="viewSubmittedFeedback('${r.id}')">👁 View</button></td>
+    </tr>`;
+  }).join('');
+}
 function exportFeedbackCSV(){
-  if(!adminFeedbackList||!adminFeedbackList.length){ showToast('No feedback to export'); return; }
+  const list=getFilteredAdminFeedback();
+  if(!list.length){ showToast('No feedback to export for this filter'); return; }
   const rows=[['Day','Destination','Supervisor','Student UID','Student Name','Tags','Submitted']];
-  adminFeedbackList.forEach(r=>{
+  list.forEach(r=>{
     let summary={};
     try{ summary=JSON.parse(r.feedback||'{}'); }catch(e){}
     const entries=Object.entries(summary);
@@ -2303,8 +2328,8 @@ function exportFeedbackCSV(){
   a.download='student_feedback_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
   showToast('✅ CSV exported!');
 }
-function viewSubmittedFeedback(i){
-  const r=adminFeedbackList[i];if(!r)return;
+function viewSubmittedFeedback(id){
+  const r=adminFeedbackList.find(x=>String(x.id)===String(id));if(!r)return;
   let summary={};
   try{ summary=JSON.parse(r.feedback||'{}'); }catch(e){}
   const entries=Object.entries(summary);
