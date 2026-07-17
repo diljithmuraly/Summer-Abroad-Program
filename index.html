@@ -672,7 +672,7 @@ const I18N={
     nav_overview:'Overview', nav_teams:'All Teams', nav_flights:'Flights', nav_visas:'Visa Status', nav_supervisors:'Supervisor Reports',
     nav_students:'Students', nav_destinations:'All Destinations', nav_members:'Members', nav_flightsvisa:'Flights & Visas',
     nav_checklisteditor:'Checklist Editor', nav_scheduleeditor:'Schedule Editor', nav_feedbackadmin:'Feedback Manager',
-    nav_announcementsadmin:'Announcements', nav_reports:'Reports', nav_settings:'Settings',
+    nav_announcementsadmin:'Announcements', nav_reports:'Reports', nav_incidentsadmin:'Incident Log', nav_settings:'Settings',
     role_admin:'Super Admin', role_pm:'Calista PMO', role_supervisor:'Supervisor', role_teamlead:'Team Leader', role_student:'Student',
     title_today_schedule:"📅 Today's Schedule", title_schedule:'📅 Schedule', title_itinerary_empty:'🗺️ Itinerary', word_itinerary:'Itinerary',
     title_itineraries:'🗺️ Itineraries', title_announcements:'📣 Announcements', title_travel:'✈️ My Travel Info', title_profile:'👤 My Profile',
@@ -699,7 +699,7 @@ const I18N={
     nav_overview:'نظرة عامة', nav_teams:'جميع الفرق', nav_flights:'الرحلات الجوية', nav_visas:'حالة التأشيرة', nav_supervisors:'تقارير المشرفين',
     nav_students:'الطلاب', nav_destinations:'جميع الوجهات', nav_members:'الأعضاء', nav_flightsvisa:'الرحلات والتأشيرات',
     nav_checklisteditor:'محرر القائمة', nav_scheduleeditor:'محرر الجدول', nav_feedbackadmin:'إدارة التقييمات',
-    nav_announcementsadmin:'الإعلانات', nav_reports:'التقارير', nav_settings:'الإعدادات',
+    nav_announcementsadmin:'الإعلانات', nav_reports:'التقارير', nav_incidentsadmin:'سجل الحوادث', nav_settings:'الإعدادات',
     role_admin:'المشرف العام', role_pm:'فريق كاليستا', role_supervisor:'مشرف', role_teamlead:'قائد الفريق', role_student:'طالب',
     title_today_schedule:'📅 جدول اليوم', title_schedule:'📅 الجدول الزمني', title_itinerary_empty:'🗺️ البرنامج', word_itinerary:'البرنامج',
     title_itineraries:'🗺️ البرامج', title_announcements:'📣 الإعلانات', title_travel:'✈️ معلومات سفري', title_profile:'👤 ملفي الشخصي',
@@ -1265,7 +1265,7 @@ async function loadIncidentsForDay(day){
 // and days — previously there was no way for the admin to see incidents at
 // all, since the old version never saved them anywhere.
 let adminIncidentsList=[];
-async function pgIncidentsAdmin(){
+function pgIncidentsAdmin(){
   setTimeout(loadAllIncidentsForAdmin,50);
   return `<div class="ph"><h1>🚨 Incident Log — All Destinations</h1><p>Every incident reported by supervisors and PMO staff</p></div>
   <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
