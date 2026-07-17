@@ -1348,15 +1348,22 @@ function renderAdminIncidents(){
 let incBodyOpen=true;
 function toggleIncBody(){incBodyOpen=!incBodyOpen;const b=document.getElementById('inc-form-body');const a=document.getElementById('inc-toggle-arrow');if(b)b.style.display=incBodyOpen?'block':'none';if(a)a.textContent=incBodyOpen?'▼':'▶';}
 
+// Students eligible to be picked in the incident form — restricted to the
+// logged-in user's own cohort so a supervisor never sees (or accidentally
+// logs an incident against) a student from a different destination. An
+// unassigned PM (no destId) still sees everyone, same rule as elsewhere.
+function incidentScopeStudents(){
+  return currentUser.destId ? destStudents(currentUser.destId) : USERS.filter(u=>u.role==='student');
+}
 function lookupStudentInc(val){
   const el=document.getElementById('inc-uid-result');
   if(!val||val.length<2){el.textContent='';return;}
-  const u=USERS.find(x=>x.role==='student'&&((x.uid&&x.uid.toLowerCase()===val.trim().toLowerCase())||(val.length>=3&&x.name.toLowerCase().includes(val.trim().toLowerCase()))));
+  const u=incidentScopeStudents().find(x=>(x.uid&&x.uid.toLowerCase()===val.trim().toLowerCase())||(val.length>=3&&x.name.toLowerCase().includes(val.trim().toLowerCase())));
   if(u){
     const d=DB.destinations.find(x=>x.id===u.destId);
     el.innerHTML=`✅ <strong>${u.name}</strong> (${u.uid}) ${d?d.flag+' '+d.name:''}`;
   } else {
-    el.style.color='var(--red)';el.textContent='No student found';
+    el.style.color='var(--red)';el.textContent='No student found in your cohort';
     setTimeout(()=>{el.style.color='var(--green)';},1500);
   }
 }
@@ -1365,7 +1372,7 @@ async function logInc(){
   const desc=document.getElementById('inc-desc')?.value;
   if(!desc||!desc.trim()){showToast('⚠️ Enter incident description');return;}
   const uidVal=document.getElementById('inc-uid')?.value||'';
-  const u=uidVal?USERS.find(x=>x.role==='student'&&((x.uid&&x.uid.toLowerCase()===uidVal.trim().toLowerCase())||(uidVal.length>=3&&x.name.toLowerCase().includes(uidVal.trim().toLowerCase())))):null;
+  const u=uidVal?incidentScopeStudents().find(x=>(x.uid&&x.uid.toLowerCase()===uidVal.trim().toLowerCase())||(uidVal.length>=3&&x.name.toLowerCase().includes(uidVal.trim().toLowerCase()))):null;
   const d=myDest();
   const entry={
     time:document.getElementById('inc-time')?.value,
