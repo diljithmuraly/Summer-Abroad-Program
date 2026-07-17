@@ -1711,11 +1711,17 @@ async function loadSupervisorReportsStatus(){
 // ═══════════════════════════════════════════════════
 function pgDestinations(){
   if(realDestCounts===null) loadRealDestCounts();
-  const cards=DB.destinations.map(d=>{
+  const sortedDests=DB.destinations.slice().sort((a,b)=>{
+    const da=a.departure?new Date(a.departure).getTime():Infinity;
+    const db=b.departure?new Date(b.departure).getTime():Infinity;
+    return da-db;
+  });
+  const cards=sortedDests.map(d=>{
     const itinDays=(DB.itineraries&&DB.itineraries[d.id]&&DB.itineraries[d.id].length)||0;
     return `<div class="dest-card ${selectedDest===d.id?'sel':''}" onclick="selectedDest=${d.id};renderMain()">
     <div style="font-size:1.6rem">${d.flag}</div><div style="font-size:0.88rem;font-weight:600;color:var(--green)">${d.name}</div>
     <div style="font-size:0.68rem;color:var(--slate);margin-top:2px">${d.country} · ${d.program}</div>
+    <div style="font-size:0.68rem;color:var(--green);margin-top:2px;font-weight:600">✈️ ${d.flightDates||'—'}</div>
     <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">
       <span class="badge ${d.flightStatus==='Confirmed'?'b-green':d.flightStatus==='Delayed'?'b-red':'b-amber'}" style="font-size:0.63rem">✈️ Flight: ${d.flightStatus}</span>
       <span class="badge ${itinDays?'b-green':'b-red'}" style="font-size:0.63rem">🗺️ ${itinDays?`Itinerary: ${itinDays} days`:'No itinerary yet'}</span>
@@ -2638,16 +2644,21 @@ function pgReports(){
   <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
     <button class="btn btn-primary" onclick="loadReports()">🔄 Refresh</button>
     <button class="btn" onclick="exportReportsCSV()">⬇ Export CSV</button>
+    <button class="btn btn-danger" id="rpt-bulkdel-btn" onclick="bulkDeleteReports()" style="display:none">🗑 Delete Selected (<span id="rpt-bulkdel-count">0</span>)</button>
     <select id="rpt-day-filter" onchange="loadReports()" style="padding:6px 11px;border:1px solid var(--border);border-radius:7px;font-size:0.8rem;font-family:inherit;">
       <option value="">All Days</option>
       ${ALL_DAYS.map(d=>`<option value="${d}">${d}</option>`).join('')}
     </select>
+    <select id="rpt-dest-filter" onchange="loadReports()" style="padding:6px 11px;border:1px solid var(--border);border-radius:7px;font-size:0.8rem;font-family:inherit;">
+      <option value="">All Destinations</option>
+      ${DB.destinations.map(d=>`<option value="${d.name}">${d.flag} ${d.name}</option>`).join('')}
+    </select>
   </div>
   <div class="card"><div class="ch" style="cursor:default"><span>📋</span><span class="ct">Submitted Reports</span><span class="cbadge" id="rpt-count-badge">Loading...</span></div>
   <div class="cb" style="padding:0;overflow-x:auto">
-    <table class="sch-tbl" style="min-width:800px">
-      <thead><tr><th>Supervisor</th><th>Destination</th><th>Day</th><th>Students</th><th>Report Notes (incidents)</th><th>Submitted</th><th></th></tr></thead>
-      <tbody id="rpt-tbody"><tr><td colspan="7" style="text-align:center;padding:20px;color:var(--slate)">Loading reports...</td></tr></tbody>
+    <table class="sch-tbl" style="min-width:850px">
+      <thead><tr><th style="width:26px"><input type="checkbox" id="rpt-select-all" onchange="toggleAllReports(this.checked)"></th><th>Supervisor</th><th>Destination</th><th>Day</th><th>Students</th><th>Report Notes (incidents)</th><th>Submitted</th><th></th></tr></thead>
+      <tbody id="rpt-tbody"><tr><td colspan="8" style="text-align:center;padding:20px;color:var(--slate)">Loading reports...</td></tr></tbody>
     </table>
   </div></div>
   <div class="stat-grid">
@@ -2729,10 +2740,14 @@ let reportsList=[];
 
 async function loadReports(){
   const dayFilter=document.getElementById('rpt-day-filter')?.value||'';
+  const destFilter=document.getElementById('rpt-dest-filter')?.value||'';
   try{
     let path='daily_reports?select=*&order=submitted_at.desc';
     if(dayFilter) path+=`&day=eq.${encodeURIComponent(dayFilter)}`;
+    if(destFilter) path+=`&destination=eq.${encodeURIComponent(destFilter)}`;
     reportsList=await supaFetch(path);
+    selectedReportIds=new Set();
+    updateReportBulkDeleteBtn();
     renderReportsTable(reportsList);
     const badge=document.getElementById('rpt-count-badge');
     if(badge) badge.textContent=reportsList.length+' reports';
@@ -2745,23 +2760,61 @@ async function loadReports(){
     if(incEl) incEl.textContent=reportsList.filter(r=>r.incidents&&!/^no\s+incidents?/i.test(r.incidents.trim())).length;
   }catch(e){
     const tb=document.getElementById('rpt-tbody');
-    if(tb) tb.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--red)">Error: ${e.message}</td></tr>`;
+    if(tb) tb.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--red)">Error: ${e.message}</td></tr>`;
   }
 }
 
+let selectedReportIds=new Set();
 function renderReportsTable(list){
   const tb=document.getElementById('rpt-tbody');
   if(!tb) return;
-  if(!list.length){tb.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--slate)">No reports submitted yet.</td></tr>';return;}
+  if(!list.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--slate)">No reports submitted yet.</td></tr>';return;}
   tb.innerHTML=list.map(r=>`<tr>
+    <td><input type="checkbox" class="rpt-check" data-id="${r.id}" onchange="toggleReportSelect('${r.id}',this.checked)" ${selectedReportIds.has(String(r.id))?'checked':''}></td>
     <td style="font-weight:600">${r.supervisor_name}</td>
     <td>${r.destination||'—'}</td>
     <td><span class="badge b-gray">${r.day}</span></td>
     <td style="font-size:0.78rem">${r.student_count||'—'}</td>
     <td style="font-size:0.78rem;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.incidents||'None'}</td>
     <td style="font-size:0.75rem;color:var(--slate)">${new Date(r.submitted_at).toLocaleString()}</td>
-    <td><button class="btn btn-sm" onclick="viewReport('${r.id}')">👁 View</button></td>
+    <td style="display:flex;gap:4px"><button class="btn btn-sm" onclick="viewReport('${r.id}')">👁 View</button><button class="btn btn-sm btn-danger" onclick="deleteReport('${r.id}')">🗑</button></td>
   </tr>`).join('');
+}
+function toggleAllReports(checked){
+  selectedReportIds=new Set(checked?reportsList.map(r=>String(r.id)):[]);
+  document.querySelectorAll('.rpt-check').forEach(cb=>cb.checked=checked);
+  updateReportBulkDeleteBtn();
+}
+function toggleReportSelect(id,checked){
+  if(checked) selectedReportIds.add(String(id)); else selectedReportIds.delete(String(id));
+  updateReportBulkDeleteBtn();
+}
+function updateReportBulkDeleteBtn(){
+  const btn=document.getElementById('rpt-bulkdel-btn');
+  const cnt=document.getElementById('rpt-bulkdel-count');
+  if(cnt) cnt.textContent=selectedReportIds.size;
+  if(btn) btn.style.display=selectedReportIds.size?'inline-flex':'none';
+}
+async function deleteReport(id){
+  if(!confirm('Delete this report permanently? This cannot be undone.')) return;
+  try{
+    await supaFetch('daily_reports?id=eq.'+id,'DELETE');
+    showToast('🗑 Report deleted');
+    loadReports();
+  }catch(e){ showToast('❌ Error deleting: '+e.message); }
+}
+async function bulkDeleteReports(){
+  if(!selectedReportIds.size) return;
+  if(!confirm(`Delete ${selectedReportIds.size} report(s) permanently? This cannot be undone.`)) return;
+  const btn=document.getElementById('rpt-bulkdel-btn');
+  if(btn){btn.disabled=true;btn.textContent='Deleting...';}
+  let success=0,fail=0;
+  for(const id of selectedReportIds){
+    try{ await supaFetch('daily_reports?id=eq.'+id,'DELETE'); success++; }
+    catch(e){ fail++; }
+  }
+  showToast(`🗑 Deleted ${success} report(s)${fail?`, ${fail} failed`:''}`);
+  loadReports();
 }
 
 function viewReport(id){
@@ -2872,7 +2925,7 @@ function pgStudents(){
   <div class="card"><div class="ch" style="cursor:default"><span>👥</span><span class="ct">All Students</span><span class="cbadge" id="stu-count">Loading...</span></div>
   <div class="cb" style="padding:0;overflow-x:auto">
     <table class="sch-tbl" style="min-width:820px">
-      <thead><tr><th style="width:30px"><input type="checkbox" id="stu-select-all" onchange="toggleAllStudents(this.checked)"></th><th style="width:40px">#</th>${sortTh('name','Name')}${sortTh('cohort','Cohort')}${sortTh('passport_number','Passport No.')}${sortTh('emirates_id','Emirates ID')}${sortTh('phone','Phone')}${sortTh('email','Email')}${sortTh('school_name','School')}<th>Docs</th><th></th></tr></thead>
+      <thead><tr><th style="width:30px"><input type="checkbox" id="stu-select-all" onchange="toggleAllStudents(this.checked)"></th>${sortTh('serial','#')}${sortTh('name','Name')}${sortTh('cohort','Cohort')}${sortTh('passport_number','Passport No.')}${sortTh('emirates_id','Emirates ID')}${sortTh('phone','Phone')}${sortTh('email','Email')}${sortTh('school_name','School')}<th>Docs</th><th></th></tr></thead>
       <tbody id="stu-tbody"><tr><td colspan="11" style="text-align:center;padding:20px;color:var(--slate)">Loading students...</td></tr></tbody>
     </table>
   </div></div>`;
@@ -3022,6 +3075,9 @@ function filterStudents(){
   });
   if(stuSortField){
     filtered=filtered.slice().sort((a,b)=>{
+      if(stuSortField==='serial'){
+        return ((stuCohortSerial.get(a.id)||0)-(stuCohortSerial.get(b.id)||0))*stuSortDir;
+      }
       const av=stuSortField==='cohort'?destNameById(a.destination_id):(a[stuSortField]||'');
       const bv=stuSortField==='cohort'?destNameById(b.destination_id):(b[stuSortField]||'');
       return String(av).toLowerCase().localeCompare(String(bv).toLowerCase())*stuSortDir;
