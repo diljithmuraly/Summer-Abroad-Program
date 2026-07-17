@@ -2156,17 +2156,60 @@ function pgReports(){
     </table>
   </div></div>
   <div class="stat-grid">
-    <div class="sc"><div class="lbl">Reports today</div><div class="val">10</div></div>
-    <div class="sc"><div class="lbl">Total reports</div><div class="val">42</div></div>
-    <div class="sc"><div class="lbl">Incidents</div><div class="val">7</div><div class="sub">this week</div></div>
+    <div class="sc"><div class="lbl">Reports today</div><div class="val" id="rpt-stat-today">—</div></div>
+    <div class="sc"><div class="lbl">Total reports</div><div class="val" id="rpt-stat-total">—</div></div>
+    <div class="sc"><div class="lbl">Incidents</div><div class="val" id="rpt-stat-incidents">—</div><div class="sub">reported</div></div>
   </div>
   <div class="card"><div class="ch" style="cursor:default"><span>⬇️</span><span class="ct">Download reports</span></div>
   <div class="cb">${DB.destinations.map(d=>{const sup=USERS.find(u=>u.role==='supervisor'&&u.destId===d.id);return `<div class="mr"><div style="font-size:1.2rem">${d.flag}</div>
     <div style="flex:1"><div class="mn">${d.name}</div><div class="msub">${sup?sup.name:'—'}</div></div>
     <div style="display:flex;gap:5px">
-      <button class="btn btn-sm" onclick="showToast('Downloading daily — ${d.name}')">📄 Daily</button>
-      <button class="btn btn-sm" onclick="showToast('Downloading full — ${d.name}')">⬇ Full</button>
+      <button class="btn btn-sm" onclick="downloadDailyReport(${d.id})">📄 Daily</button>
+      <button class="btn btn-sm" onclick="downloadFullReport(${d.id})">⬇ Full</button>
     </div></div>`;}).join('')}</div></div>`;
+}
+function csvDownload(rows,filename){
+  const csv=rows.map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download=filename;a.click();
+}
+async function downloadDailyReport(destId){
+  const d=DB.destinations.find(x=>x.id===destId);if(!d)return;
+  showToast('Fetching daily report — '+d.name+'...');
+  try{
+    const rows=await supaFetch(`daily_reports?select=*&destination=eq.${encodeURIComponent(d.name)}&day=eq.${encodeURIComponent(currentDay)}&order=submitted_at.desc`);
+    if(!rows||!rows.length){ showToast('⚠️ No report submitted yet for '+d.name+' on '+currentDay); return; }
+    const out=[['Supervisor','Destination','Day','Student Count','Academic Sessions','Activities','Health & Wellbeing','Incidents','Tomorrow Prep','Submitted']];
+    rows.forEach(r=>out.push([r.supervisor_name,r.destination,r.day,r.student_count,r.academic_sessions,r.activities,r.health_wellbeing,r.incidents,r.tomorrow_prep,new Date(r.submitted_at).toLocaleString()]));
+    csvDownload(out,`daily_report_${d.name.replace(/[^a-z0-9]+/gi,'_')}_${currentDay.replace(/\s+/g,'')}.csv`);
+    showToast('✅ Downloaded');
+  }catch(e){ showToast('❌ Error fetching report: '+e.message); }
+}
+async function downloadFullReport(destId){
+  const d=DB.destinations.find(x=>x.id===destId);if(!d)return;
+  showToast('Building full report — '+d.name+'...');
+  try{
+    const [reports,students]=await Promise.all([
+      supaFetch(`daily_reports?select=*&destination=eq.${encodeURIComponent(d.name)}&order=day.asc`),
+      supaFetch(`students?select=*,documents(*),flights(*),guardians(*)&destination_id=eq.${destId}`)
+    ]);
+    const out=[[`Full Report — ${d.name}`],[`Generated ${new Date().toLocaleString()}`],[]];
+    out.push(['STUDENT ROSTER']);
+    out.push(['Name','Passport No.','Emirates ID','Phone','Email','School','Guardian','Guardian Phone','Passport Copy','Visa','Photo','Flight']);
+    (students||[]).forEach(s=>{
+      const doc=s.documents&&s.documents[0]||{};
+      const g=s.guardians&&s.guardians[0]||{};
+      const fl=s.flights&&s.flights[0]||{};
+      out.push([s.name,s.passport_number,s.emirates_id,s.phone,s.email,s.school_name,g.name,g.phone,doc.passport_copy?'Yes':'No',doc.visa?'Yes':'No',doc.photograph?'Yes':'No',fl.flight_number||'']);
+    });
+    out.push([]);
+    out.push(['SUPERVISOR DAILY REPORTS']);
+    out.push(['Day','Supervisor','Student Count','Academic Sessions','Activities','Health & Wellbeing','Incidents','Tomorrow Prep','Submitted']);
+    (reports||[]).forEach(r=>out.push([r.day,r.supervisor_name,r.student_count,r.academic_sessions,r.activities,r.health_wellbeing,r.incidents,r.tomorrow_prep,new Date(r.submitted_at).toLocaleString()]));
+    if(!students?.length&&!reports?.length){ showToast('⚠️ No data found yet for '+d.name); return; }
+    csvDownload(out,`full_report_${d.name.replace(/[^a-z0-9]+/gi,'_')}.csv`);
+    showToast('✅ Downloaded');
+  }catch(e){ showToast('❌ Error building report: '+e.message); }
 }
 
 
@@ -2181,6 +2224,13 @@ async function loadReports(){
     renderReportsTable(reportsList);
     const badge=document.getElementById('rpt-count-badge');
     if(badge) badge.textContent=reportsList.length+' reports';
+    const todayStr=new Date().toDateString();
+    const todayEl=document.getElementById('rpt-stat-today');
+    if(todayEl) todayEl.textContent=reportsList.filter(r=>new Date(r.submitted_at).toDateString()===todayStr).length;
+    const totalEl=document.getElementById('rpt-stat-total');
+    if(totalEl) totalEl.textContent=reportsList.length;
+    const incEl=document.getElementById('rpt-stat-incidents');
+    if(incEl) incEl.textContent=reportsList.filter(r=>r.incidents&&!/^no\s+incidents?/i.test(r.incidents.trim())).length;
   }catch(e){
     const tb=document.getElementById('rpt-tbody');
     if(tb) tb.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--red)">Error: ${e.message}</td></tr>`;
