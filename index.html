@@ -1268,7 +1268,10 @@ function pgIncidents(){
 // avoid disrupting the form the user might be filling in).
 async function loadIncidentsForDay(day){
   try{
-    const rows=await supaFetch(`incidents?select=*&day=eq.${encodeURIComponent(day)}&order=created_at.desc`);
+    const d=myDest(); // the logged-in user's assigned destination, if any
+    let path=`incidents?select=*&day=eq.${encodeURIComponent(day)}`;
+    if(d) path+=`&destination=eq.${encodeURIComponent(d.name)}`;
+    const rows=await supaFetch(path+'&order=created_at.desc');
     incidentLogs[day]=(rows||[]).map(r=>({
       time:r.time, sev:r.severity, type:r.type, studentUid:r.student_uid, studentName:r.student_name,
       desc:r.description, action:r.action_taken, reportedTo:r.reported_to, ts:new Date(r.created_at).toLocaleTimeString(),
