@@ -596,7 +596,24 @@ async function loadMembersFromSupabase(){
   window._membersLoadError=loadError?loadError.message:null;
   membersLoaded=true;
 }
-loadMembersFromSupabase().then(()=>{ restoreSession(); loadMilestoneText(); loadFeedbackTags(); });
+// Loads real students (added via the Students admin page or bulk upload)
+// into USERS so they can actually log in. Before this, only the hardcoded
+// demo students could log in — real ones added through the app had no way
+// in at all, since nothing ever pulled them into the same list doLogin()
+// checks.
+async function loadStudentsIntoUsers(){
+  try{
+    const rows=await supaFetch('students?select=id,name,destination_id,username,password,uid');
+    (rows||[]).forEach(r=>{
+      try{
+        if(!r||!r.username||!r.password) return; // no credentials generated for this one yet
+        if(USERS.some(u=>u.username.toLowerCase()===r.username.toLowerCase())) return;
+        USERS.push({id:'stu_'+r.id,username:r.username,password:r.password,name:r.name,role:'student',destId:r.destination_id||0,uid:r.uid||'',initials:getInitials({name:r.name})});
+      }catch(rowErr){ console.error('Skipped malformed student row:',r,rowErr); }
+    });
+  }catch(e){ /* students table may not have login columns yet — fails silently */ }
+}
+loadMembersFromSupabase().then(()=>loadStudentsIntoUsers()).then(()=>{ restoreSession(); loadMilestoneText(); loadFeedbackTags(); });
 let currentUser=null,currentSection='',currentDay='Day 1',selectedDest=1;
 let checkState={},flagState={},feedbackState={},incidentLogs={},visaData={},roomNumbers={},feedbackSubmittedDays={};
 
@@ -2074,6 +2091,7 @@ function addScheduleItem(){DB.schedule.push({time:'00:00 AM',activity:'New activ
 function removeScheduleItem(i){DB.schedule.splice(i,1);showToast('Removed');renderMain();}
 
 function pgFeedbackAdmin(){
+  setTimeout(loadSubmittedFeedbackForAdmin,50);
   const tags=FEEDBACK_TYPES.map((ft,i)=>{
     const isNeg=FEEDBACK_NEG_TYPES.includes(ft);
     return `<div style="display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--border)">
@@ -2108,7 +2126,57 @@ function pgFeedbackAdmin(){
     <div style="font-size:0.75rem;color:var(--slate);margin-bottom:8px">This is what supervisors will see on each student row. Click any tag right here to rename, switch positive/negative, or delete it — then click 💾 Save Changes above to make it live.</div>
     <div>${preview}</div>
   </div></div>
+  <div class="card" style="margin-top:6px"><div class="ch" style="cursor:default"><span>📋</span><span class="ct">Submitted student feedback</span><span class="cbadge" id="fb-admin-count">Loading...</span></div>
+  <div class="cb" style="padding:0;overflow-x:auto">
+    <table class="sch-tbl" style="min-width:800px">
+      <thead><tr><th>Day</th><th>Destination</th><th>Supervisor</th><th>Students flagged</th><th>Submitted</th><th></th></tr></thead>
+      <tbody id="fb-admin-tbody"><tr><td colspan="6" style="text-align:center;padding:20px;color:var(--slate)">Loading submitted feedback...</td></tr></tbody>
+    </table>
+  </div></div>
   ${renderMilestonePopupPanel()}`;
+}
+let adminFeedbackList=[];
+async function loadSubmittedFeedbackForAdmin(){
+  try{
+    adminFeedbackList=await supaFetch('daily_feedback?select=*&order=day.desc');
+    const tb=document.getElementById('fb-admin-tbody');
+    const badge=document.getElementById('fb-admin-count');
+    if(badge) badge.textContent=(adminFeedbackList||[]).length+' submissions';
+    if(!tb) return;
+    if(!adminFeedbackList||!adminFeedbackList.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--slate)">No feedback submitted yet.</td></tr>'; return; }
+    tb.innerHTML=adminFeedbackList.map((r,i)=>{
+      let summary={};
+      try{ summary=JSON.parse(r.feedback||'{}'); }catch(e){}
+      const flaggedCount=Object.keys(summary).length;
+      const when=r.submitted_at||r.created_at;
+      return `<tr>
+        <td><span class="badge b-gray">${r.day||'—'}</span></td>
+        <td style="font-size:0.78rem">${r.destination||'—'}</td>
+        <td style="font-size:0.78rem">${r.supervisor_name||'—'}</td>
+        <td style="font-size:0.78rem">${flaggedCount}</td>
+        <td style="font-size:0.72rem;color:var(--slate);white-space:nowrap">${when?new Date(when).toLocaleString():'—'}</td>
+        <td><button class="btn btn-sm" onclick="viewSubmittedFeedback(${i})">👁 View</button></td>
+      </tr>`;
+    }).join('');
+  }catch(e){
+    const tb=document.getElementById('fb-admin-tbody');
+    if(tb) tb.innerHTML=`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--red)">Error loading feedback: ${e.message}</td></tr>`;
+  }
+}
+function viewSubmittedFeedback(i){
+  const r=adminFeedbackList[i];if(!r)return;
+  let summary={};
+  try{ summary=JSON.parse(r.feedback||'{}'); }catch(e){}
+  const entries=Object.entries(summary);
+  const rows=entries.length?entries.map(([uid,v])=>`<div class="ii" style="margin-bottom:6px"><div class="il"><span class="uid-badge">${uid}</span> ${v.name||''}</div><div class="iv">${(v.tags||[]).join(', ')}</div></div>`).join('')
+    :'<div style="color:var(--slate);font-size:0.8rem">No students were flagged in this submission.</div>';
+  openModal(`<h2>📝 Student Feedback — ${r.day}</h2>
+    <div class="info-grid" style="margin-bottom:12px">
+      <div class="ii"><div class="il">Supervisor</div><div class="iv">${r.supervisor_name||'—'}</div></div>
+      <div class="ii"><div class="il">Destination</div><div class="iv">${r.destination||'—'}</div></div>
+    </div>
+    ${rows}
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">Close</button></div>`);
 }
 function renderMilestonePopupPanel(){
   const todayStr=new Date().toISOString().slice(0,10);
@@ -2626,6 +2694,7 @@ function pgStudents(){
     <button class="btn btn-primary" onclick="openAddStudentModal()">+ Add Student</button>
     <button class="btn" onclick="openBulkUploadModal()">📤 Bulk Upload</button>
     <button class="btn" onclick="exportStudentsCSV()">⬇ Export CSV</button>
+    <button class="btn" onclick="generateMissingStudentLogins()">🔑 Generate Missing Logins</button>
     <button class="btn btn-danger" id="stu-bulkdel-btn" onclick="bulkDeleteStudents()" style="display:none">🗑 Delete Selected (<span id="stu-bulkdel-count">0</span>)</button>
     <select id="stu-dest-filter" onchange="filterStudents()" style="padding:6px 11px;border:1px solid var(--border);border-radius:7px;font-size:0.8rem;font-family:inherit"><option value="">All cohorts</option>${destOpts}</select>
     <input id="stu-search" placeholder="🔍 Search..." style="padding:6px 11px;border:1px solid var(--border);border-radius:7px;font-size:0.8rem;font-family:inherit;flex:1;min-width:140px;" oninput="filterStudents()">
@@ -2819,16 +2888,26 @@ async function saveStudent(){
   }
   const btn=document.querySelector('.modal .btn-primary');
   if(btn){btn.textContent='Saving...';btn.disabled=true;}
+  const parts=name.trim().split(/\s+/);
+  const uname=parts[0].toLowerCase().replace(/[^a-z]/g,'')+'.'+(parts[parts.length-1]||'').toLowerCase().replace(/[^a-z]/g,'');
+  const pass='Stud@'+Math.floor(1000+Math.random()*9000);
+  const uid='STU'+String(Date.now()).slice(-6);
   try{
     const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'return=representation'};
-    const res=await fetch(SUPA_URL+'/rest/v1/students',{method:'POST',headers,body:JSON.stringify({name,destination_id:parseInt(destId),passport_number:passport||null,emirates_id:eid||null,phone:phone||null,email:email||null,school_name:school||null})});
+    let res=await fetch(SUPA_URL+'/rest/v1/students',{method:'POST',headers,body:JSON.stringify({name,destination_id:parseInt(destId),passport_number:passport||null,emirates_id:eid||null,phone:phone||null,email:email||null,school_name:school||null,username:uname,password:pass,uid})});
+    if(res.status===409||(await res.clone().text()).includes('username')){
+      // username collided with an existing student — retry once with a random suffix
+      const uname2=uname+Math.floor(10+Math.random()*89);
+      res=await fetch(SUPA_URL+'/rest/v1/students',{method:'POST',headers,body:JSON.stringify({name,destination_id:parseInt(destId),passport_number:passport||null,emirates_id:eid||null,phone:phone||null,email:email||null,school_name:school||null,username:uname2,password:pass,uid})});
+    }
     const resText=await res.text();
     if(!res.ok){
       let msg=resText;
       try{const err=JSON.parse(resText);msg=err.message||err.details||resText;}catch(x){}
       const friendly=msg.includes('passport_number')?'Passport number already exists in the database.':
                      msg.includes('emirates_id')?'Emirates ID already exists in the database.':
-                     msg.includes('email')?'Email already exists in the database.':msg;
+                     msg.includes('email')?'Email already exists in the database.':
+                     msg.includes('username')?'Could not generate a unique username — try adding the student again.':msg;
       const errEl=document.getElementById('sn-err');
       if(errEl){errEl.textContent='❌ '+friendly;errEl.style.display='block';}
       if(btn){btn.textContent='Save Student';btn.disabled=false;}
@@ -2842,7 +2921,10 @@ async function saveStudent(){
     if(gname&&gphone) await supaFetch('guardians','POST',{student_id:sid,name:gname,phone:gphone});
     const pc=v('sn-doc-passport'),vi=v('sn-doc-visa'),ph=v('sn-doc-photo');
     if(pc||vi||ph) await supaFetch('documents','POST',{student_id:sid,passport_copy:pc||null,visa:vi||null,photograph:ph||null});
-    showToast('✅ '+name+' added successfully!');closeModal();loadStudents();realDestCounts=null;
+    if(!USERS.some(u=>u.username.toLowerCase()===(student.username||'').toLowerCase())){
+      USERS.push({id:'stu_'+sid,username:student.username,password:student.password,name:student.name,role:'student',destId:student.destination_id||0,uid:student.uid||'',initials:getInitials({name:student.name})});
+    }
+    showToast(`✅ ${name} added! Login: ${student.username} / ${student.password}`);closeModal();loadStudents();realDestCounts=null;
   }catch(e){
     const errEl=document.getElementById('sn-err');
     if(errEl){errEl.textContent='❌ '+e.message;errEl.style.display='block';}
@@ -2951,12 +3033,20 @@ async function saveBulkStudents(){
     if(!destId){
       fail++;errors.push(`Row ${i+1} (${r.name}): Destination "${r.destination}" doesn't match any cohort`);continue;
     }
+    const uname0=r.name.trim().split(/\s+/).map(w=>w.toLowerCase().replace(/[^a-z]/g,'')).filter(Boolean).slice(0,2).join('.');
+    let uname=uname0||'student'+i, tries=0;
+    while(USERS.some(u=>u.username.toLowerCase()===uname.toLowerCase())&&tries<20){ uname=uname0+Math.floor(10+Math.random()*89); tries++; }
+    const pass='Stud@'+Math.floor(1000+Math.random()*9000);
+    const uid='STU'+String(Date.now()).slice(-6)+i;
     try{
       const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'return=representation'};
-      const res=await fetch(SUPA_URL+'/rest/v1/students',{method:'POST',headers,body:JSON.stringify({name:r.name,destination_id:destId,passport_number:r.passport_number||null,emirates_id:r.emirates_id||null,phone:r.phone||null,email:r.email||null,school_name:r.school_name||null})});
+      const res=await fetch(SUPA_URL+'/rest/v1/students',{method:'POST',headers,body:JSON.stringify({name:r.name,destination_id:destId,passport_number:r.passport_number||null,emirates_id:r.emirates_id||null,phone:r.phone||null,email:r.email||null,school_name:r.school_name||null,username:uname,password:pass,uid})});
       if(!res.ok){const e=await res.json();fail++;errors.push(`Row ${i+1} (${r.name}): ${e.message||e.details}`);continue;}
       const [student]=await res.json();
       if(r.guardian_name&&r.guardian_phone) await supaFetch('guardians','POST',{student_id:student.id,name:r.guardian_name,phone:r.guardian_phone}).catch(()=>{});
+      if(!USERS.some(u=>u.username.toLowerCase()===(student.username||'').toLowerCase())){
+        USERS.push({id:'stu_'+student.id,username:student.username,password:student.password,name:student.name,role:'student',destId:student.destination_id||0,uid:student.uid||'',initials:getInitials({name:student.name})});
+      }
       success++;
     }catch(e){fail++;errors.push(`Row ${i+1}: ${e.message}`);}
   }
@@ -2999,23 +3089,39 @@ function openEditStudentModal(id){
     <div class="form-row">
       <div class="fg-n"><label>School</label><input id="es-school" value="${s.school_name||''}"></div>
     </div>
+    <hr style="margin:14px 0;border:none;border-top:1px solid var(--border)">
+    <div style="font-size:0.8rem;font-weight:600;color:var(--slate);margin-bottom:10px">🔑 LOGIN CREDENTIALS</div>
+    <div class="form-row">
+      <div class="fg-n"><label>Username</label><input id="es-uname" value="${s.username||''}" placeholder="auto-generated if blank"></div>
+      <div class="fg-n"><label>Password</label><input id="es-pass" value="${s.password||''}" placeholder="auto-generated if blank"></div>
+    </div>
     <div class="login-error" id="es-err" style="display:none"></div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">Cancel</button>
     <button class="btn btn-primary" onclick="saveEditStudent('${id}')">Save Changes</button></div>`);
 }
 async function saveEditStudent(id){
   const name=v('es-name'),destId=v('es-dest'),passport=v('es-passport'),eid=v('es-eid'),phone=v('es-phone'),email=v('es-email'),school=v('es-school');
+  let uname=v('es-uname'),pass=v('es-pass');
   if(!name||!destId){
     const errEl=document.getElementById('es-err');
     if(errEl){errEl.textContent='⚠️ Please fill all required fields';errEl.style.display='block';}
     return;
   }
+  if(!uname) uname=name.trim().split(/\s+/).map(w=>w.toLowerCase().replace(/[^a-z]/g,'')).filter(Boolean).slice(0,2).join('.');
+  if(!pass) pass='Stud@'+Math.floor(1000+Math.random()*9000);
   const btn=document.querySelector('.modal .btn-primary');
   if(btn){btn.textContent='Saving...';btn.disabled=true;}
   try{
     const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'return=representation'};
-    const res=await fetch(SUPA_URL+'/rest/v1/students?id=eq.'+id,{method:'PATCH',headers,body:JSON.stringify({name,destination_id:parseInt(destId),passport_number:passport||null,emirates_id:eid||null,phone:phone||null,email:email||null,school_name:school||null})});
-    if(!res.ok) throw new Error('Save failed ('+res.status+')');
+    const res=await fetch(SUPA_URL+'/rest/v1/students?id=eq.'+id,{method:'PATCH',headers,body:JSON.stringify({name,destination_id:parseInt(destId),passport_number:passport||null,emirates_id:eid||null,phone:phone||null,email:email||null,school_name:school||null,username:uname,password:pass})});
+    if(!res.ok){
+      const t=await res.text();
+      throw new Error(t.includes('username')?'That username is already taken by another student.':('Save failed ('+res.status+')'));
+    }
+    // keep USERS in sync so login works immediately without a refresh
+    const existing=USERS.find(u=>u.id==='stu_'+id);
+    if(existing){ existing.username=uname; existing.password=pass; existing.name=name; existing.destId=parseInt(destId); }
+    else if(!USERS.some(u=>u.username.toLowerCase()===uname.toLowerCase())){ USERS.push({id:'stu_'+id,username:uname,password:pass,name,role:'student',destId:parseInt(destId),uid:'',initials:getInitials({name})}); }
     showToast('✅ '+name+' updated');
     closeModal();
     realDestCounts=null;
@@ -3103,12 +3209,39 @@ async function saveFlight(studentId){
 
 function exportStudentsCSV(){
   if(!studentsList.length){showToast('No students to export');return;}
-  const rows=[['Name','Cohort','Passport','Emirates ID','Phone','Email','School','Added']];
-  studentsList.forEach(s=>rows.push([s.name,destNameById(s.destination_id).replace(/^\S+\s/,''),s.passport_number,s.emirates_id,s.phone,s.email,s.school_name,new Date(s.created_at).toLocaleDateString()]));
+  const rows=[['Name','Cohort','Passport','Emirates ID','Phone','Email','School','Username','Password','Added']];
+  studentsList.forEach(s=>rows.push([s.name,destNameById(s.destination_id).replace(/^\S+\s/,''),s.passport_number,s.emirates_id,s.phone,s.email,s.school_name,s.username||'—',s.password||'—',new Date(s.created_at).toLocaleDateString()]));
   const csv=rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
   a.download='students_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
   showToast('✅ CSV exported!');
+}
+// One-time catch-up for students that were added before login credentials
+// existed as a feature — finds anyone in the table with no username yet and
+// generates one, so nobody gets permanently left without a login.
+async function generateMissingStudentLogins(){
+  const missing=studentsList.filter(s=>!s.username);
+  if(!missing.length){ showToast('✅ Every student already has a login'); return; }
+  if(!confirm(`${missing.length} student(s) don't have login credentials yet. Generate them now?`)) return;
+  let success=0,fail=0;
+  for(let i=0;i<missing.length;i++){
+    const s=missing[i];
+    const uname0=(s.name||'').trim().split(/\s+/).map(w=>w.toLowerCase().replace(/[^a-z]/g,'')).filter(Boolean).slice(0,2).join('.');
+    let uname=uname0||'student'+s.id, tries=0;
+    while(USERS.some(u=>u.username.toLowerCase()===uname.toLowerCase())&&tries<20){ uname=uname0+Math.floor(10+Math.random()*89); tries++; }
+    const pass='Stud@'+Math.floor(1000+Math.random()*9000);
+    const uid=s.uid||('STU'+String(Date.now()).slice(-6)+i);
+    try{
+      await supaFetch('students?id=eq.'+s.id,'PATCH',{username:uname,password:pass,uid});
+      s.username=uname; s.password=pass; s.uid=uid;
+      if(!USERS.some(u=>u.username.toLowerCase()===uname.toLowerCase())){
+        USERS.push({id:'stu_'+s.id,username:uname,password:pass,name:s.name,role:'student',destId:s.destination_id||0,uid,initials:getInitials({name:s.name})});
+      }
+      success++;
+    }catch(e){ fail++; }
+  }
+  showToast(`✅ Generated logins for ${success} student(s)${fail?`, ${fail} failed`:''}`);
+  renderStudentTable(studentsList);
 }
 
 
