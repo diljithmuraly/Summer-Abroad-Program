@@ -992,7 +992,7 @@ async function submitDailyFeedback(btn){
 function tgFb(uid,day,ft){const k=uid+'_'+day+'_'+ft;feedbackState[k]=!feedbackState[k];showToast(feedbackState[k]?'Marked':'Removed');renderMain();}
 
 // ═══════════════════════════════════════════════════
-// AUTOMATIC MILESTONE FEEDBACK POPUPS (flight → hotel → food → academic)
+// AUTOMATIC MILESTONE FEEDBACK POPUPS (flight → hotel → food → academic → custom)
 // ═══════════════════════════════════════════════════
 let MILESTONE_TEXT={
   flight:{icon:'✈️',title:'Flight Experience',question:'How was your flight to your destination?'},
@@ -1000,10 +1000,15 @@ let MILESTONE_TEXT={
   food:{icon:'🍽️',title:'Food Experience',question:'How has the food been so far?'},
   academic:{icon:'🎓',title:'Academic Experience',question:'How was your first day of classes?'},
 };
+const MILESTONE_BUILTIN_KEYS=['flight','hotel','food','academic'];
 async function loadMilestoneText(){
   try{
     const rows=await supaFetch('milestone_text?select=*');
-    if(rows&&rows.length){ rows.forEach(r=>{ if(MILESTONE_TEXT[r.key]) MILESTONE_TEXT[r.key]={icon:r.icon,title:r.title,question:r.question}; }); }
+    if(rows&&rows.length){
+      rows.forEach(r=>{
+        MILESTONE_TEXT[r.key]={icon:r.icon,title:r.title,question:r.question,dayIndex:r.day_index};
+      });
+    }
   }catch(e){ /* table may not exist yet — defaults stay in effect */ }
 }
 function buildFeedbackTriggers(destId){
@@ -1015,7 +1020,13 @@ function buildFeedbackTriggers(destId){
   if(days[2]) triggers.push({date:days[2].date,key:'food',icon:MILESTONE_TEXT.food.icon,title:MILESTONE_TEXT.food.title,question:MILESTONE_TEXT.food.question});
   const uniDay=days.find(d=>d.events.some(e=>/course\s*1\b/i.test(e.activity)));
   if(uniDay) triggers.push({date:uniDay.date,key:'academic',icon:MILESTONE_TEXT.academic.icon,title:MILESTONE_TEXT.academic.title,question:MILESTONE_TEXT.academic.question});
-  return triggers;
+  Object.keys(MILESTONE_TEXT).forEach(key=>{
+    if(MILESTONE_BUILTIN_KEYS.includes(key)) return;
+    const m=MILESTONE_TEXT[key];
+    const day=days[m.dayIndex];
+    if(day) triggers.push({date:day.date,key,icon:m.icon,title:m.title,question:m.question});
+  });
+  return triggers.sort((a,b)=>a.date<b.date?-1:1);
 }
 let pendingFeedbackQueue=[],fbRating=0;
 function checkFeedbackPopups(){
@@ -1777,22 +1788,30 @@ function renderMilestonePopupPanel(){
       <div>${items}</div>
     </div>`;
   }).join('');
-  const editRows=['flight','hotel','food','academic'].map(key=>{
+  const editRows=Object.keys(MILESTONE_TEXT).map(key=>{
     const m=MILESTONE_TEXT[key];
+    const isBuiltin=MILESTONE_BUILTIN_KEYS.includes(key);
+    const label=isBuiltin?key:(m.title||'Custom question');
     return `<div style="padding:12px 16px;border-bottom:1px solid var(--border)">
-      <div style="font-size:0.75rem;font-weight:600;color:var(--slate);margin-bottom:8px;text-transform:capitalize">${key} popup</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:0.75rem;font-weight:600;color:var(--slate);text-transform:capitalize">${label}${isBuiltin?' popup (built-in)':' popup (custom)'}</div>
+        ${!isBuiltin?`<button class="btn btn-sm btn-danger" onclick="deleteMilestoneText('${key}')">🗑 Delete</button>`:''}
+      </div>
       <div class="form-row">
         <div class="fg-n" style="max-width:70px"><label>Icon</label><input id="mt-icon-${key}" value="${m.icon}"></div>
         <div class="fg-n"><label>Title</label><input id="mt-title-${key}" value="${m.title}"></div>
       </div>
       <div class="fg-n"><label>Question</label><input id="mt-question-${key}" value="${m.question}"></div>
-      <button class="btn btn-sm btn-primary" style="margin-top:6px" onclick="saveMilestoneText('${key}')">Save ${key} text</button>
+      ${!isBuiltin?`<div class="fg-n" style="max-width:220px"><label>Ask on which day of the itinerary? (0 = first day)</label><input id="mt-day-${key}" type="number" min="0" value="${m.dayIndex??0}"></div>`:''}
+      <button class="btn btn-sm btn-primary" style="margin-top:6px" onclick="saveMilestoneText('${key}',${!isBuiltin})">Save</button>
     </div>`;
   }).join('');
-  return `<div class="card" style="margin-top:6px"><div class="ch" style="cursor:default"><span>✏️</span><span class="ct">Edit milestone popup text</span></div>
+  return `<div class="card" style="margin-top:6px"><div class="ch" style="cursor:default"><span>✏️</span><span class="ct">Edit milestone popup text</span>
+    <button class="btn btn-sm btn-primary" style="margin-left:auto" onclick="openAddMilestoneModal()">+ Add Question</button>
+  </div>
   <div class="cb" style="padding:0">
     <div style="padding:10px 16px;font-size:0.76rem;color:var(--slate);border-bottom:1px solid var(--border)">
-      Change the icon, title, or question shown for each automatic popup. Saves for everyone, everywhere — takes effect on the next popup shown.
+      Change the icon, title, or question shown for each automatic popup, or add a brand new one. Saves for everyone, everywhere — takes effect on the next popup shown.
     </div>
     ${editRows}
   </div></div>
@@ -1804,20 +1823,72 @@ function renderMilestonePopupPanel(){
     ${rows}
   </div></div>`;
 }
-async function saveMilestoneText(key){
+function openAddMilestoneModal(){
+  openModal(`<h2>➕ Add Milestone Question</h2>
+    <p style="font-size:0.8rem;color:var(--slate);margin-bottom:12px">This creates a brand new automatic popup, in addition to Flight/Hotel/Food/Academic.</p>
+    <div class="form-row">
+      <div class="fg-n" style="max-width:70px"><label>Icon</label><input id="mt-new-icon" value="⭐" placeholder="e.g. 🎭"></div>
+      <div class="fg-n"><label>Title</label><input id="mt-new-title" placeholder="e.g. Excursion Experience"></div>
+    </div>
+    <div class="fg-n"><label>Question</label><input id="mt-new-question" placeholder="e.g. How was today's excursion?"></div>
+    <div class="fg-n" style="max-width:220px"><label>Ask on which day of the itinerary? (0 = first day)</label><input id="mt-new-day" type="number" min="0" value="3"></div>
+    <div class="login-error" id="mt-new-err" style="display:none"></div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="saveNewMilestone()">Add Question</button></div>`);
+}
+async function saveNewMilestone(){
+  const icon=v('mt-new-icon')||'⭐';
+  const title=v('mt-new-title');
+  const question=v('mt-new-question');
+  const dayIndex=parseInt(v('mt-new-day'));
+  if(!title||!question||isNaN(dayIndex)||dayIndex<0){
+    const errEl=document.getElementById('mt-new-err');
+    if(errEl){errEl.textContent='⚠️ Please fill in title, question, and a valid day number';errEl.style.display='block';}
+    return;
+  }
+  const key='custom_'+Date.now();
+  try{
+    const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'resolution=merge-duplicates,return=representation'};
+    const res=await fetch(SUPA_URL+'/rest/v1/milestone_text?on_conflict=key',{method:'POST',headers,body:JSON.stringify({key,icon,title,question,day_index:dayIndex})});
+    if(!res.ok) throw new Error(await res.text());
+    MILESTONE_TEXT[key]={icon,title,question,dayIndex};
+    showToast('✅ Question added');
+    closeModal();
+    renderMain();
+  }catch(e){
+    const errEl=document.getElementById('mt-new-err');
+    if(errEl){errEl.textContent='❌ Save failed — has the milestone_text table been created in Supabase (with a day_index column)?';errEl.style.display='block';}
+  }
+}
+async function deleteMilestoneText(key){
+  if(MILESTONE_BUILTIN_KEYS.includes(key)){ showToast("Built-in questions can't be deleted, only edited"); return; }
+  if(!confirm('Delete this milestone question? This cannot be undone.')) return;
+  try{
+    const headers={'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY};
+    await fetch(SUPA_URL+'/rest/v1/milestone_text?key=eq.'+encodeURIComponent(key),{method:'DELETE',headers});
+  }catch(e){}
+  delete MILESTONE_TEXT[key];
+  showToast('🗑 Question deleted');
+  renderMain();
+}
+async function saveMilestoneText(key,isCustom,silent){
   const icon=document.getElementById('mt-icon-'+key)?.value.trim()||MILESTONE_TEXT[key].icon;
   const title=document.getElementById('mt-title-'+key)?.value.trim();
   const question=document.getElementById('mt-question-'+key)?.value.trim();
-  if(!title||!question){ showToast('⚠️ Title and question cannot be empty'); return; }
+  const dayEl=document.getElementById('mt-day-'+key);
+  const dayIndex=isCustom?(dayEl?parseInt(dayEl.value):MILESTONE_TEXT[key].dayIndex):null;
+  if(!title||!question||(isCustom&&(isNaN(dayIndex)||dayIndex<0))){ showToast('⚠️ Title, question, and a valid day number are required'); return false; }
   try{
     const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'resolution=merge-duplicates,return=representation'};
-    const res=await fetch(SUPA_URL+'/rest/v1/milestone_text?on_conflict=key',{method:'POST',headers,body:JSON.stringify({key,icon,title,question})});
+    const res=await fetch(SUPA_URL+'/rest/v1/milestone_text?on_conflict=key',{method:'POST',headers,body:JSON.stringify({key,icon,title,question,day_index:dayIndex})});
     if(!res.ok) throw new Error(await res.text());
-    MILESTONE_TEXT[key]={icon,title,question};
-    showToast('✅ '+key+' popup text saved');
+    MILESTONE_TEXT[key]={icon,title,question,dayIndex:dayIndex??MILESTONE_TEXT[key]?.dayIndex};
+    if(!silent) showToast('✅ Saved');
     renderMain();
+    return true;
   }catch(e){
     showToast('❌ Save failed — has the milestone_text table been created in Supabase?');
+    return false;
   }
 }
 function previewMilestonePopup(idx){
@@ -2262,15 +2333,15 @@ function openAddStudentModal(){
       <div class="fg-n"><label>Destination / Cohort *</label><select id="sn-dest"><option value="">— Select cohort —</option>${destOpts}</select></div>
     </div>
     <div class="form-row">
-      <div class="fg-n"><label>Passport Number *</label><input id="sn-passport" placeholder="e.g. A12345678"></div>
-      <div class="fg-n"><label>Emirates ID *</label><input id="sn-eid" placeholder="784-xxxx-xxxxxxx-x"></div>
+      <div class="fg-n"><label>Passport Number</label><input id="sn-passport" placeholder="e.g. A12345678"></div>
+      <div class="fg-n"><label>Emirates ID</label><input id="sn-eid" placeholder="784-xxxx-xxxxxxx-x"></div>
     </div>
     <div class="form-row">
-      <div class="fg-n"><label>Phone *</label><input id="sn-phone" placeholder="+971 xx xxx xxxx"></div>
-      <div class="fg-n"><label>Email *</label><input id="sn-email" type="email" placeholder="email@example.com"></div>
+      <div class="fg-n"><label>Phone</label><input id="sn-phone" placeholder="+971 xx xxx xxxx"></div>
+      <div class="fg-n"><label>Email</label><input id="sn-email" type="email" placeholder="email@example.com"></div>
     </div>
     <div class="form-row">
-      <div class="fg-n"><label>School Name *</label><input id="sn-school" placeholder="School name"></div>
+      <div class="fg-n"><label>School Name</label><input id="sn-school" placeholder="School name"></div>
     </div>
     <hr style="margin:14px 0;border:none;border-top:1px solid var(--border)">
     <div style="font-size:0.8rem;font-weight:600;color:var(--slate);margin-bottom:10px">📎 GUARDIAN INFO (optional)</div>
@@ -2302,13 +2373,13 @@ function highlightRequired(ids){
 }
 
 async function saveStudent(){
-  const required=['sn-name','sn-dest','sn-passport','sn-eid','sn-phone','sn-email','sn-school'];
+  const required=['sn-name','sn-dest'];
   required.forEach(id=>{
     const el=document.getElementById(id);
     if(el) el.style.borderColor=el.value.trim()?'var(--border)':'var(--red)';
   });
   const name=v('sn-name'),destId=v('sn-dest'),passport=v('sn-passport'),eid=v('sn-eid'),phone=v('sn-phone'),email=v('sn-email'),school=v('sn-school');
-  if(!name||!destId||!passport||!eid||!phone||!email||!school){
+  if(!name||!destId){
     const errEl=document.getElementById('sn-err');
     if(errEl){errEl.textContent='⚠️ Please fill all required fields (marked with *)';errEl.style.display='block';}
     return;
@@ -2317,7 +2388,7 @@ async function saveStudent(){
   if(btn){btn.textContent='Saving...';btn.disabled=true;}
   try{
     const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'return=representation'};
-    const res=await fetch(SUPA_URL+'/rest/v1/students',{method:'POST',headers,body:JSON.stringify({name,destination_id:parseInt(destId),passport_number:passport,emirates_id:eid,phone,email,school_name:school})});
+    const res=await fetch(SUPA_URL+'/rest/v1/students',{method:'POST',headers,body:JSON.stringify({name,destination_id:parseInt(destId),passport_number:passport||null,emirates_id:eid||null,phone:phone||null,email:email||null,school_name:school||null})});
     const resText=await res.text();
     if(!res.ok){
       let msg=resText;
@@ -2442,8 +2513,8 @@ async function saveBulkStudents(){
     const pct=Math.round((i/parsedCSVRows.length)*100);
     document.getElementById('bulk-bar').style.width=pct+'%';
     document.getElementById('bulk-status').textContent=`Processing ${i+1} of ${parsedCSVRows.length}...`;
-    if(!r.name||!r.passport_number||!r.emirates_id||!r.phone||!r.email||!r.school_name){
-      fail++;errors.push(`Row ${i+1}: Missing required fields`);continue;
+    if(!r.name){
+      fail++;errors.push(`Row ${i+1}: Missing name`);continue;
     }
     const destId=resolveDestId(r.destination);
     if(!destId){
@@ -2451,7 +2522,7 @@ async function saveBulkStudents(){
     }
     try{
       const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'return=representation'};
-      const res=await fetch(SUPA_URL+'/rest/v1/students',{method:'POST',headers,body:JSON.stringify({name:r.name,destination_id:destId,passport_number:r.passport_number,emirates_id:r.emirates_id,phone:r.phone,email:r.email,school_name:r.school_name})});
+      const res=await fetch(SUPA_URL+'/rest/v1/students',{method:'POST',headers,body:JSON.stringify({name:r.name,destination_id:destId,passport_number:r.passport_number||null,emirates_id:r.emirates_id||null,phone:r.phone||null,email:r.email||null,school_name:r.school_name||null})});
       if(!res.ok){const e=await res.json();fail++;errors.push(`Row ${i+1} (${r.name}): ${e.message||e.details}`);continue;}
       const [student]=await res.json();
       if(r.guardian_name&&r.guardian_phone) await supaFetch('guardians','POST',{student_id:student.id,name:r.guardian_name,phone:r.guardian_phone}).catch(()=>{});
