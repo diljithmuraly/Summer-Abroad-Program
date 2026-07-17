@@ -1735,9 +1735,9 @@ function pgFeedbackAdmin(){
       <button class="btn btn-sm btn-danger" onclick="removeFeedbackType(${i})" title="Delete tag">🗑</button>
     </div>`;
   }).join('');
-  const preview=FEEDBACK_TYPES.map((ft)=>{
+  const preview=FEEDBACK_TYPES.map((ft,i)=>{
     const isNeg=FEEDBACK_NEG_TYPES.includes(ft);
-    return `<span class="ftag ${isNeg?'neg':'pos'}">${ft}</span>`;
+    return `<span class="ftag ${isNeg?'neg':'pos'}" style="cursor:pointer" onclick="editPreviewTag(${i})" title="Click to edit">${ft} ✏️</span>`;
   }).join('');
   return `<div class="ph"><h1 data-i18n="title_feedbacktagmanager">📝 Feedback Tag Manager</h1>
     <p>Add, rename or remove feedback tags below, then click <strong>💾 Save Changes</strong> to make them live for every supervisor. Nothing here is saved automatically.</p></div>
@@ -1752,7 +1752,7 @@ function pgFeedbackAdmin(){
   </div></div>
   <div class="card" style="margin-top:6px"><div class="ch" style="cursor:default"><span>👁</span><span class="ct">Live preview — supervisor tag bar</span></div>
   <div class="cb" style="padding:14px 16px">
-    <div style="font-size:0.75rem;color:var(--slate);margin-bottom:8px">This is what supervisors will see on each student row once you click 💾 Save Changes above — it updates as you type, but is only real for supervisors after saving.</div>
+    <div style="font-size:0.75rem;color:var(--slate);margin-bottom:8px">This is what supervisors will see on each student row. Click any tag right here to rename, switch positive/negative, or delete it — then click 💾 Save Changes above to make it live.</div>
     <div>${preview}</div>
   </div></div>
   ${renderMilestonePopupPanel()}`;
@@ -1857,6 +1857,32 @@ function setFeedbackNeg(i,isNeg){
   const ni=FEEDBACK_NEG_TYPES.indexOf(ft);
   if(isNeg&&ni<0)FEEDBACK_NEG_TYPES.push(ft);
   else if(!isNeg&&ni>=0)FEEDBACK_NEG_TYPES.splice(ni,1);
+}
+function editPreviewTag(i){
+  const ft=FEEDBACK_TYPES[i];
+  const isNeg=FEEDBACK_NEG_TYPES.includes(ft);
+  openModal(`<h2>✏️ Edit Tag</h2>
+    <div class="fg-n"><label>Tag name</label><input id="ept-name" value="${ft}"></div>
+    <div class="fg-n"><label>Type</label><select id="ept-neg">
+      <option value="pos" ${!isNeg?'selected':''}>✅ Positive</option>
+      <option value="neg" ${isNeg?'selected':''}>🔴 Negative</option>
+    </select></div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="btn btn-danger" onclick="removeFeedbackType(${i});closeModal()">🗑 Delete</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="applyPreviewTagEdit(${i})">Apply</button>
+      </div>
+    </div>`);
+}
+function applyPreviewTagEdit(i){
+  const val=document.getElementById('ept-name')?.value||'';
+  const isNeg=document.getElementById('ept-neg')?.value==='neg';
+  renameFeedbackType(i,val);
+  setFeedbackNeg(i,isNeg);
+  closeModal();
+  showToast('Tag updated — click 💾 Save Changes to apply');
+  renderMain();
 }
 async function loadFeedbackTags(){
   try{
