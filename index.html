@@ -1531,7 +1531,9 @@ function pgMembers(){
   }
   window._lastRenderedMemberIds=filtered.map(u=>u.id);
   const sortTh=(field,label,width)=>`<th style="width:${width};cursor:pointer;user-select:none" onclick="sortMembers('${field}')">${label} <span style="font-size:0.7em;color:var(--slate)">${window._msort===field?(window._msortDir===1?'▲':'▼'):''}</span></th>`;
+  setTimeout(runMemberSyncCheck,50);
   return `<div class="ph"><h1 data-i18n="title_membersall">👥 Members</h1><p data-i18n="sub_membersall">Supervisors, Team Leaders & Calista PMO — for students, use the Students page</p></div>
+  <div id="mem-sync-check" style="display:none;margin-bottom:11px;padding:10px 14px;border-radius:8px;font-size:0.79rem"></div>
   <div style="display:flex;gap:7px;margin-bottom:11px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-primary" onclick="openAddMemberModal()">+ Add Member</button>
     <button class="btn" onclick="nav('students')">🎓 Go to Students page</button>
@@ -1563,6 +1565,45 @@ function pgMembers(){
         </div></td>
       </tr>`;}).join('')}
     </tbody></table></div></div>`;
+}
+// Compares raw row counts straight from Supabase (source of truth) against
+// what actually made it into the in-app USERS list, per role. Surfaces any
+// gap right on the Members page instead of requiring DevTools — this tells
+// us definitively whether missing members are (a) never really saved to the
+// database, or (b) saved fine but dropped somewhere while loading them back.
+async function runMemberSyncCheck(){
+  const el=document.getElementById('mem-sync-check');
+  if(!el) return;
+  try{
+    const dbRows=await supaFetch('members?select=id,role,username');
+    const dbByRole={},appByRole={};
+    (dbRows||[]).forEach(r=>{ dbByRole[r.role]=(dbByRole[r.role]||0)+1; });
+    USERS.filter(u=>u.role!=='student'&&u.id&&u.id.toString().startsWith('mem_')).forEach(u=>{ appByRole[u.role]=(appByRole[u.role]||0)+1; });
+    const roleLabel={supervisor:'Supervisor',pm:'Calista PMO',admin:'Super Admin'};
+    const mismatches=Object.keys(dbByRole).filter(role=>(appByRole[role]||0)<dbByRole[role]);
+    if(!document.getElementById('mem-sync-check')) return; // page navigated away while this was loading
+    if(mismatches.length){
+      el.style.display='block';
+      el.style.background='var(--red-pale, #FBEAEA)';
+      el.style.border='1px solid var(--red, #C0392B)';
+      el.style.color='var(--red, #C0392B)';
+      el.innerHTML='⚠️ <strong>Sync mismatch found:</strong> '+mismatches.map(role=>{
+        const label=roleLabel[role]||role;
+        return `${label} — database has ${dbByRole[role]}, app is showing ${appByRole[role]||0}`;
+      }).join(' · ')+'. This means those rows ARE saved in Supabase but something is preventing the app from loading them back in.';
+    } else {
+      el.style.display='block';
+      el.style.background='var(--green-pale, #E8F5E9)';
+      el.style.border='1px solid var(--green, #2E7D32)';
+      el.style.color='var(--green, #2E7D32)';
+      el.innerHTML='✅ In sync — every member row in the database ('+Object.entries(dbByRole).map(([r,c])=>`${roleLabel[r]||r}: ${c}`).join(', ')+') is loaded in the app.';
+    }
+  }catch(e){
+    el.style.display='block';
+    el.style.background='var(--red-pale, #FBEAEA)';
+    el.style.color='var(--red, #C0392B)';
+    el.innerHTML='⚠️ Sync check failed: '+e.message;
+  }
 }
 function sortMembers(field){
   if(window._msort===field) window._msortDir*=-1; else { window._msort=field; window._msortDir=1; }
