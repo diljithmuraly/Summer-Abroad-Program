@@ -476,7 +476,7 @@ const DB = {
 };
 
 const VISA_STATUSES=['Not Started','Process Started','Processing','Submitted','Approved','Rejected','Re-submitted'];
-const FEEDBACK_TYPES=['Late to Breakfast','Late to Bus','Late to Airport','Lost Baggage','Absent','Marked in Bus','Marked in Class','Excellent Behavior','Outstanding Performance'];
+let FEEDBACK_TYPES=['Late to Breakfast','Late to Bus','Late to Airport','Lost Baggage','Absent','Marked in Bus','Marked in Class','Excellent Behavior','Outstanding Performance'];
 let FEEDBACK_NEG_TYPES=['Late to Breakfast','Late to Bus','Late to Airport','Lost Baggage','Absent'];
 DB.itineraries = {
   11: [{"date": "2026-07-20", "city": "Dubai", "accommodation": null, "events": [{"time": "11:30", "activity": "Meeting at Cost Cafe, Terminal 3 - Departures"}], "day": "Monday"}, {"date": "2026-07-21", "city": "Shanghai", "accommodation": "Jianguo Hotel Shanghai — 439 Caoxi Rd (N), Xujiahui, Xuhui District, Shanghai, China, 200030 · +86 21 6439 9299", "events": [{"time": "12:30", "activity": "Proceed for check-in"}, {"time": "02:50", "activity": "EK302 departs Dubai"}, {"time": "15:30", "activity": "Arrive at Shanghai Pudong International Airport (EK302)"}, {"time": "16:30", "activity": "Transfer from airport to hotel", "remarks": "45 mins drive"}, {"time": "17:30–18:30", "activity": "Arrival at hotel — welcome briefing & room allocation"}, {"time": "18:30–20:30", "activity": "Welcome dinner at hotel"}, {"time": "20:30", "activity": "Overnight at hotel"}], "day": "Tuesday"}, {"date": "2026-07-22", "city": "Shanghai", "accommodation": "Jianguo Hotel Shanghai — 439 Caoxi Rd (N), Xujiahui, Xuhui District, Shanghai, China, 200030 · +86 21 6439 9299", "events": [{"time": "07:30–08:30", "activity": "Breakfast"}, {"time": "08:30–09:30", "activity": "Depart for Minhang Campus of Jiaotong University", "remarks": "30 mins drive"}, {"time": "09:30–11:30", "activity": "Campus tour and school visit, opening ceremony"}, {"time": "11:30–12:30", "activity": "Lunch at university"}, {"time": "12:30–13:30", "activity": "Transfer to Zhao's Workshop in Sijing, Songjiang", "remarks": "45 mins drive"}, {"time": "13:30–15:30", "activity": "Making Chinese afternoon tea and snacks (1 pastry - cake & 1 tea)"}, {"time": "15:30–17:30", "activity": "Chinese calligraphy & paper art workshop"}, {"time": "17:30–19:30", "activity": "Visit Sijing Ancient Town and dinner", "remarks": "10 mins drive"}, {"time": "19:30–20:30", "activity": "Appreciation of shadow puppetry"}, {"time": "20:30", "activity": "Return to hotel"}, {"time": "21:30", "activity": "Arrive at the hotel and rest"}], "day": "Wednesday"}, {"date": "2026-07-23", "city": "Shanghai", "accommodation": "Jianguo Hotel Shanghai — 439 Caoxi Rd (N), Xujiahui, Xuhui District, Shanghai, China, 200030 · +86 21 6439 9299", "events": [{"time": "07:30–08:30", "activity": "Breakfast"}, {"time": "08:30–09:30", "activity": "Depart for Minhang Campus of Jiaotong University", "remarks": "30 mins drive"}, {"time": "09:30–12:00", "activity": "Course 1: AI Security Detectives"}, {"time": "12:00–13:30", "activity": "University lunch"}, {"time": "13:30–15:30", "activity": "Course 2: AI Security Detectives (continued)"}, {"time": "15:30–17:30", "activity": "Snack time, continue Course 2 (1 pastry - croissant & 1 juice)"}, {"time": "17:30–18:30", "activity": "End of course, transfer to restaurant"}, {"time": "18:30–20:00", "activity": "Dinner"}, {"time": "20:00", "activity": "Return to hotel"}], "day": "Thursday"}, {"date": "2026-07-24", "city": "Shanghai", "accommodation": "Jianguo Hotel Shanghai — 439 Caoxi Rd (N), Xujiahui, Xuhui District, Shanghai, China, 200030 · +86 21 6439 9299", "events": [{"time": "07:30–08:30", "activity": "Breakfast"}, {"time": "08:30–09:30", "activity": "Depart for Minhang Campus of Jiaotong University", "remarks": "30 mins drive"}, {"time": "09:30–12:00", "activity": "Course 3: From Phishing Emails to Attack Timelines"}, {"time": "12:00–13:30", "activity": "Lunch break"}, {"time": "13:30–15:30", "activity": "Course 4: From Phishing Emails to Attack Timelines (continued)"}, {"time": "15:30–17:30", "activity": "Snack time, continue Course 4 (1 pastry - mooncake & 1 bottled water)"}, {"time": "17:30–18:30", "activity": "End of course, transfer to restaurant"}, {"time": "18:30–20:00", "activity": "Dinner"}, {"time": "20:00", "activity": "Return to hotel"}], "day": "Friday"}, {"date": "2026-07-25", "city": "Shanghai", "accommodation": "Jianguo Hotel Shanghai — 439 Caoxi Rd (N), Xujiahui, Xuhui District, Shanghai, China, 200030 · +86 21 6439 9299", "events": [{"time": "07:30–08:30", "activity": "Breakfast"}, {"time": "08:30–09:30", "activity": "Depart for Minhang Campus of Jiaotong University", "remarks": "30 mins drive"}, {"time": "09:30–12:00", "activity": "Course 5: Can AI Be Tricked?"}, {"time": "12:00–13:00", "activity": "Lunch break"}, {"time": "13:00–14:00", "activity": "Course 6: Can AI Be Tricked? (continued)"}, {"time": "14:00–15:00", "activity": "Robotics & drone experience"}, {"time": "15:00–16:00", "activity": "Snack time (1 pastry - cinnamon rolls & 1 tea)"}, {"time": "16:00–17:00", "activity": "Visit to Simulated Smart City"}, {"time": "17:00–18:00", "activity": "Transfer to dinner"}, {"time": "18:00–19:00", "activity": "BBQ dinner"}, {"time": "19:00", "activity": "Return to hotel"}, {"time": "20:00", "activity": "Arrival at the hotel and rest"}], "day": "Saturday"}, {"date": "2026-07-26", "city": "Shanghai", "accommodation": "Jianguo Hotel Shanghai — 439 Caoxi Rd (N), Xujiahui, Xuhui District, Shanghai, China, 200030 · +86 21 6439 9299", "events": [{"time": "07:30–08:30", "activity": "Breakfast"}, {"time": "08:30–09:30", "activity": "Depart for Minhang Campus of Jiaotong University", "remarks": "30 mins drive"}, {"time": "09:30–12:00", "activity": "Course 7: A Security Checkup for AI Systems"}, {"time": "12:00–13:30", "activity": "Lunch break"}, {"time": "13:30–15:30", "activity": "Course 8: A Security Checkup for AI Systems (continued)"}, {"time": "15:30–16:30", "activity": "Snack time, continue Course 8 (1 pastry - macaroons & 1 juice)"}, {"time": "16:30–18:30", "activity": "Transfer to restaurant for dinner"}, {"time": "18:30–20:00", "activity": "Dinner"}, {"time": "20:00", "activity": "Return to hotel"}], "day": "Sunday"}, {"date": "2026-07-27", "city": "Shanghai", "accommodation": "Jianguo Hotel Shanghai — 439 Caoxi Rd (N), Xujiahui, Xuhui District, Shanghai, China, 200030 · +86 21 6439 9299", "events": [{"time": "07:30–08:30", "activity": "Breakfast"}, {"time": "08:30–09:30", "activity": "Depart for Minhang Campus of Jiaotong University", "remarks": "30 mins drive"}, {"time": "09:30–12:00", "activity": "Course 9: From Finding Problems to Solving Them"}, {"time": "12:00–13:30", "activity": "Lunch break"}, {"time": "13:30–15:30", "activity": "Course 10: From Finding Problems to Solving Them (continued)"}, {"time": "15:30–16:30", "activity": "Snack time, continue Course 10 (1 pastry - pizza & 1 bottled water)"}, {"time": "16:30–18:30", "activity": "End of course, certificate presentation, head to dinner"}, {"time": "18:30–20:00", "activity": "Dinner"}, {"time": "20:00", "activity": "Return to hotel"}], "day": "Monday"}, {"date": "2026-07-28", "city": "Shanghai", "accommodation": "Jianguo Hotel Shanghai — 439 Caoxi Rd (N), Xujiahui, Xuhui District, Shanghai, China, 200030 · +86 21 6439 9299", "events": [{"time": "07:30–08:30", "activity": "Breakfast"}, {"time": "08:30–09:30", "activity": "Transfer to Zhujiajiao Ancient Town", "remarks": "50 mins drive"}, {"time": "09:30–12:00", "activity": "Visit Zhujiajiao Ancient Town & Hanfu experience"}, {"time": "12:00–13:00", "activity": "Lunch break"}, {"time": "13:00–14:00", "activity": "Free time"}, {"time": "14:00–14:30", "activity": "Transfer to the kayaking field"}, {"time": "14:30–16:30", "activity": "Amazon Jungle kayaking activity"}, {"time": "16:30–17:00", "activity": "Snack time (1 pastry - cake & 1 tea)"}, {"time": "17:00–18:30", "activity": "Transfer to dinner"}, {"time": "18:30–20:00", "activity": "Dinner"}, {"time": "20:00", "activity": "Return to hotel"}, {"time": "21:00", "activity": "Arrive at the hotel and rest"}], "day": "Tuesday"}, {"date": "2026-07-29", "city": "Shanghai", "accommodation": "Jianguo Hotel Shanghai — 439 Caoxi Rd (N), Xujiahui, Xuhui District, Shanghai, China, 200030 · +86 21 6439 9299", "events": [{"time": "07:00–08:00", "activity": "Breakfast"}, {"time": "08:00–10:00", "activity": "Transfer to Shanghai Planetarium", "remarks": "1 hr 10 mins drive"}, {"time": "10:00–12:30", "activity": "Explore Shanghai Museum"}, {"time": "12:30–13:30", "activity": "Lunch break"}, {"time": "13:30–15:30", "activity": "Visit the Bund in Shanghai", "remarks": "1 hr 15 mins drive"}, {"time": "15:30–16:30", "activity": "Snack time (1 pastry - croissant & 1 juice)"}, {"time": "16:30–17:30", "activity": "Explore Nanjing Road"}, {"time": "17:30–18:30", "activity": "Transfer to dinner"}, {"time": "18:30–19:30", "activity": "Dinner"}, {"time": "19:30", "activity": "Return to hotel"}, {"time": "20:30", "activity": "Arrive at the hotel and rest"}], "day": "Wednesday"}, {"date": "2026-07-30", "city": "Shanghai", "accommodation": "Jianguo Hotel Shanghai — 439 Caoxi Rd (N), Xujiahui, Xuhui District, Shanghai, China, 200030 · +86 21 6439 9299", "events": [{"time": "07:30–08:30", "activity": "Breakfast"}, {"time": "08:30–09:20", "activity": "Transfer to Shanghai Science and Technology Museum", "remarks": "30 mins drive"}, {"time": "09:20–11:30", "activity": "Visit Shanghai Science & Technology Museum"}, {"time": "11:30–13:00", "activity": "Lunch break"}, {"time": "13:00–13:30", "activity": "Transfer to Shanghai Museum"}, {"time": "13:30–15:30", "activity": "Explore Shanghai Museum"}, {"time": "15:30–16:30", "activity": "Snack time (1 pastry - pizza & 1 juice)"}, {"time": "16:30–17:30", "activity": "Transfer to west bank of Xuhui", "remarks": "25 mins drive"}, {"time": "17:30–18:30", "activity": "Transfer to dinner"}, {"time": "18:30–20:00", "activity": "Dinner"}, {"time": "20:00", "activity": "Return to hotel"}], "day": "Thursday"}, {"date": "2026-07-31", "city": "Shanghai", "accommodation": "Jianguo Hotel Shanghai — 439 Caoxi Rd (N), Xujiahui, Xuhui District, Shanghai, China, 200030 · +86 21 6439 9299", "events": [{"time": "07:30–08:30", "activity": "Breakfast"}, {"time": "08:30–09:30", "activity": "Transfer to Shanghai Circuit Land"}, {"time": "09:30–10:40", "activity": "Visit Shanghai Circuit Land", "remarks": "1 hr drive"}, {"time": "10:40", "activity": "Go to Baidu Xiaoma"}, {"time": "11:00–12:00", "activity": "Experience autonomous driving"}, {"time": "12:00–13:45", "activity": "Lunch break"}, {"time": "13:45–15:00", "activity": "Go to Volkswagen's automated production line", "remarks": "20 mins drive"}, {"time": "15:00–18:00", "activity": "Explore Automobile Museum", "remarks": "Snacks on the bus - 1 pastry (cake) & 1 juice"}, {"time": "18:00–18:30", "activity": "Transfer to dinner"}, {"time": "18:30–19:30", "activity": "Dinner"}, {"time": "19:30", "activity": "Return to hotel"}], "day": "Friday"}, {"date": "2026-08-01", "city": "Shanghai", "accommodation": "Jianguo Hotel Shanghai — 439 Caoxi Rd (N), Xujiahui, Xuhui District, Shanghai, China, 200030 · +86 21 6439 9299", "events": [{"time": "08:00–09:00", "activity": "Breakfast"}, {"time": "09:00–11:30", "activity": "Transfer to Yu Garden in Shanghai", "remarks": "10 mins drive"}, {"time": "11:30–12:30", "activity": "Lunch break"}, {"time": "12:30–15:30", "activity": "Wukang Building citywalk", "remarks": "40 mins drive"}, {"time": "15:30–18:00", "activity": "Transfer to the restaurant", "remarks": "Snack on the bus - 1 pastry (croissant) & 1 juice"}, {"time": "18:00–19:00", "activity": "Dinner"}, {"time": "19:00–20:30", "activity": "Huangpu River cruise"}, {"time": "20:30", "activity": "Return to hotel"}], "day": "Saturday"}, {"date": "2026-08-02", "city": "Shanghai", "accommodation": "Jianguo Hotel Shanghai — 439 Caoxi Rd (N), Xujiahui, Xuhui District, Shanghai, China, 200030 · +86 21 6439 9299", "events": [{"time": "06:30", "activity": "Breakfast"}, {"time": "07:00", "activity": "Depart for Disneyland", "remarks": "40 mins drive"}, {"time": "08:30–21:30", "activity": "Full day at Shanghai Disneyland"}, {"time": "21:30", "activity": "Fireworks show"}, {"time": "23:00", "activity": "Return to hotel", "remarks": "40 mins drive"}], "day": "Sunday"}, {"date": "2026-08-03", "city": "Shanghai", "accommodation": null, "events": [{"time": "07:30–08:30", "activity": "Breakfast"}, {"time": "08:30–13:00", "activity": "Free time to pack and rest, check out"}, {"time": "13:30–18:30", "activity": "Visit Lujiazui Shopping Mall, lunch"}, {"time": "18:30–19:30", "activity": "Gather and head to dinner"}, {"time": "19:30", "activity": "Transfer to Pudong Airport", "remarks": "1 hr drive"}, {"time": "20:30", "activity": "Airport check-in"}], "day": "Monday"}, {"date": "2026-08-04", "city": "Dubai", "accommodation": null, "events": [{"time": "00:05", "activity": "Emirates EK303 departs Shanghai"}, {"time": "04:45", "activity": "Arrive in Dubai"}], "day": "Tuesday"}],
@@ -501,7 +501,7 @@ async function loadMembersFromSupabase(){
   }catch(e){ /* Supabase members table may not exist yet — fails silently, demo accounts still work */ }
   membersLoaded=true;
 }
-loadMembersFromSupabase().then(restoreSession);
+loadMembersFromSupabase().then(()=>{ restoreSession(); loadMilestoneText(); loadFeedbackTags(); });
 let currentUser=null,currentSection='',currentDay='Day 1',selectedDest=1;
 let checkState={},flagState={},feedbackState={},incidentLogs={},visaData={},roomNumbers={},feedbackSubmittedDays={};
 
@@ -994,15 +994,27 @@ function tgFb(uid,day,ft){const k=uid+'_'+day+'_'+ft;feedbackState[k]=!feedbackS
 // ═══════════════════════════════════════════════════
 // AUTOMATIC MILESTONE FEEDBACK POPUPS (flight → hotel → food → academic)
 // ═══════════════════════════════════════════════════
+let MILESTONE_TEXT={
+  flight:{icon:'✈️',title:'Flight Experience',question:'How was your flight to your destination?'},
+  hotel:{icon:'🏨',title:'Hotel Experience',question:'How was your hotel check-in and room?'},
+  food:{icon:'🍽️',title:'Food Experience',question:'How has the food been so far?'},
+  academic:{icon:'🎓',title:'Academic Experience',question:'How was your first day of classes?'},
+};
+async function loadMilestoneText(){
+  try{
+    const rows=await supaFetch('milestone_text?select=*');
+    if(rows&&rows.length){ rows.forEach(r=>{ if(MILESTONE_TEXT[r.key]) MILESTONE_TEXT[r.key]={icon:r.icon,title:r.title,question:r.question}; }); }
+  }catch(e){ /* table may not exist yet — defaults stay in effect */ }
+}
 function buildFeedbackTriggers(destId){
   const days=(DB.itineraries&&DB.itineraries[destId])||[];
   if(!days.length) return [];
   const triggers=[];
-  triggers.push({date:days[0].date,key:'flight',icon:'✈️',title:'Flight Experience',question:'How was your flight to your destination?'});
-  if(days[1]) triggers.push({date:days[1].date,key:'hotel',icon:'🏨',title:'Hotel Experience',question:'How was your hotel check-in and room?'});
-  if(days[2]) triggers.push({date:days[2].date,key:'food',icon:'🍽️',title:'Food Experience',question:'How has the food been so far?'});
+  triggers.push({date:days[0].date,key:'flight',icon:MILESTONE_TEXT.flight.icon,title:MILESTONE_TEXT.flight.title,question:MILESTONE_TEXT.flight.question});
+  if(days[1]) triggers.push({date:days[1].date,key:'hotel',icon:MILESTONE_TEXT.hotel.icon,title:MILESTONE_TEXT.hotel.title,question:MILESTONE_TEXT.hotel.question});
+  if(days[2]) triggers.push({date:days[2].date,key:'food',icon:MILESTONE_TEXT.food.icon,title:MILESTONE_TEXT.food.title,question:MILESTONE_TEXT.food.question});
   const uniDay=days.find(d=>d.events.some(e=>/course\s*1\b/i.test(e.activity)));
-  if(uniDay) triggers.push({date:uniDay.date,key:'academic',icon:'🎓',title:'Academic Experience',question:'How was your first day of classes?'});
+  if(uniDay) triggers.push({date:uniDay.date,key:'academic',icon:MILESTONE_TEXT.academic.icon,title:MILESTONE_TEXT.academic.title,question:MILESTONE_TEXT.academic.question});
   return triggers;
 }
 let pendingFeedbackQueue=[],fbRating=0;
@@ -1728,16 +1740,19 @@ function pgFeedbackAdmin(){
     return `<span class="ftag ${isNeg?'neg':'pos'}">${ft}</span>`;
   }).join('');
   return `<div class="ph"><h1 data-i18n="title_feedbacktagmanager">📝 Feedback Tag Manager</h1>
-    <p>Add, rename or remove feedback tags. Changes apply instantly across all supervisor views.</p></div>
+    <p>Add, rename or remove feedback tags below, then click <strong>💾 Save Changes</strong> to make them live for every supervisor. Nothing here is saved automatically.</p></div>
   <div class="card"><div class="ch" style="cursor:default"><span>🏷️</span><span class="ct">Feedback tags (${FEEDBACK_TYPES.length})</span>
-    <button class="btn btn-sm btn-primary" onclick="addFeedbackType()" style="margin-left:auto">+ Add Tag</button>
+    <div style="margin-left:auto;display:flex;gap:8px">
+      <button class="btn btn-sm" onclick="addFeedbackType()">+ Add Tag</button>
+      <button class="btn btn-sm btn-primary" id="save-tags-btn" onclick="saveFeedbackTagsToDb()">💾 Save Changes</button>
+    </div>
   </div>
   <div class="cb" style="padding:0">
     ${tags||'<div style="padding:16px;color:var(--slate);font-size:0.82rem">No tags yet — add one above.</div>'}
   </div></div>
   <div class="card" style="margin-top:6px"><div class="ch" style="cursor:default"><span>👁</span><span class="ct">Live preview — supervisor tag bar</span></div>
   <div class="cb" style="padding:14px 16px">
-    <div style="font-size:0.75rem;color:var(--slate);margin-bottom:8px">This is exactly what supervisors see on each student row.</div>
+    <div style="font-size:0.75rem;color:var(--slate);margin-bottom:8px">This is what supervisors will see on each student row once you click 💾 Save Changes above — it updates as you type, but is only real for supervisors after saving.</div>
     <div>${preview}</div>
   </div></div>
   ${renderMilestonePopupPanel()}`;
@@ -1762,13 +1777,48 @@ function renderMilestonePopupPanel(){
       <div>${items}</div>
     </div>`;
   }).join('');
-  return `<div class="card" style="margin-top:6px"><div class="ch" style="cursor:default"><span>🔔</span><span class="ct">Automatic milestone feedback popups</span></div>
+  const editRows=['flight','hotel','food','academic'].map(key=>{
+    const m=MILESTONE_TEXT[key];
+    return `<div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+      <div style="font-size:0.75rem;font-weight:600;color:var(--slate);margin-bottom:8px;text-transform:capitalize">${key} popup</div>
+      <div class="form-row">
+        <div class="fg-n" style="max-width:70px"><label>Icon</label><input id="mt-icon-${key}" value="${m.icon}"></div>
+        <div class="fg-n"><label>Title</label><input id="mt-title-${key}" value="${m.title}"></div>
+      </div>
+      <div class="fg-n"><label>Question</label><input id="mt-question-${key}" value="${m.question}"></div>
+      <button class="btn btn-sm btn-primary" style="margin-top:6px" onclick="saveMilestoneText('${key}')">Save ${key} text</button>
+    </div>`;
+  }).join('');
+  return `<div class="card" style="margin-top:6px"><div class="ch" style="cursor:default"><span>✏️</span><span class="ct">Edit milestone popup text</span></div>
+  <div class="cb" style="padding:0">
+    <div style="padding:10px 16px;font-size:0.76rem;color:var(--slate);border-bottom:1px solid var(--border)">
+      Change the icon, title, or question shown for each automatic popup. Saves for everyone, everywhere — takes effect on the next popup shown.
+    </div>
+    ${editRows}
+  </div></div>
+  <div class="card" style="margin-top:6px"><div class="ch" style="cursor:default"><span>🔔</span><span class="ct">Automatic milestone feedback popups</span></div>
   <div class="cb" style="padding:0 0 4px">
     <div style="padding:10px 16px;font-size:0.76rem;color:var(--slate);border-bottom:1px solid var(--border)">
       Students & supervisors get asked these automatically at login, based on each cohort's real itinerary dates — not manually triggered. Today is <strong>${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</strong>, so anything marked "not yet due" simply hasn't reached its date yet. Use 🧪 Preview to see the popup itself without waiting.
     </div>
     ${rows}
   </div></div>`;
+}
+async function saveMilestoneText(key){
+  const icon=document.getElementById('mt-icon-'+key)?.value.trim()||MILESTONE_TEXT[key].icon;
+  const title=document.getElementById('mt-title-'+key)?.value.trim();
+  const question=document.getElementById('mt-question-'+key)?.value.trim();
+  if(!title||!question){ showToast('⚠️ Title and question cannot be empty'); return; }
+  try{
+    const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'resolution=merge-duplicates,return=representation'};
+    const res=await fetch(SUPA_URL+'/rest/v1/milestone_text?on_conflict=key',{method:'POST',headers,body:JSON.stringify({key,icon,title,question})});
+    if(!res.ok) throw new Error(await res.text());
+    MILESTONE_TEXT[key]={icon,title,question};
+    showToast('✅ '+key+' popup text saved');
+    renderMain();
+  }catch(e){
+    showToast('❌ Save failed — has the milestone_text table been created in Supabase?');
+  }
 }
 function previewMilestonePopup(idx){
   const t=window._previewTriggers&&window._previewTriggers[idx];
@@ -1786,7 +1836,7 @@ function addFeedbackType(){
   const name=prompt('New tag name:','New Tag');
   if(!name)return;
   FEEDBACK_TYPES.push(name);
-  showToast('✅ Tag added');renderMain();
+  showToast('Tag added — click 💾 Save Changes to apply');renderMain();
 }
 function renameFeedbackType(i,val){
   if(!val.trim()){showToast('Name cannot be empty');return;}
@@ -1794,22 +1844,49 @@ function renameFeedbackType(i,val){
   FEEDBACK_TYPES[i]=val.trim();
   const ni=FEEDBACK_NEG_TYPES.indexOf(old);
   if(ni>=0)FEEDBACK_NEG_TYPES[ni]=val.trim();
-  showToast('✅ Tag renamed');
 }
 function removeFeedbackType(i){
   if(!confirm('Delete tag "'+FEEDBACK_TYPES[i]+'"?'))return;
   const ft=FEEDBACK_TYPES.splice(i,1)[0];
   const ni=FEEDBACK_NEG_TYPES.indexOf(ft);
   if(ni>=0)FEEDBACK_NEG_TYPES.splice(ni,1);
-  showToast('🗑 Tag removed');renderMain();
+  showToast('🗑 Tag removed — click 💾 Save Changes to apply');renderMain();
 }
 function setFeedbackNeg(i,isNeg){
   const ft=FEEDBACK_TYPES[i];
   const ni=FEEDBACK_NEG_TYPES.indexOf(ft);
   if(isNeg&&ni<0)FEEDBACK_NEG_TYPES.push(ft);
   else if(!isNeg&&ni>=0)FEEDBACK_NEG_TYPES.splice(ni,1);
-  showToast('✅ Updated');renderMain();
 }
+async function loadFeedbackTags(){
+  try{
+    const rows=await supaFetch('feedback_tags?select=*&order=sort_order.asc');
+    if(rows&&rows.length){
+      FEEDBACK_TYPES=rows.map(r=>r.name);
+      FEEDBACK_NEG_TYPES=rows.filter(r=>r.is_negative).map(r=>r.name);
+    }
+  }catch(e){ /* table may not exist yet — defaults stay in effect */ }
+}
+async function saveFeedbackTagsToDb(){
+  const btn=document.getElementById('save-tags-btn');
+  if(btn){btn.textContent='Saving...';btn.disabled=true;}
+  try{
+    const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'return=representation'};
+    const delRes=await fetch(SUPA_URL+'/rest/v1/feedback_tags?id=gt.0',{method:'DELETE',headers});
+    if(!delRes.ok) throw new Error(await delRes.text());
+    const payload=FEEDBACK_TYPES.map((name,i)=>({name,is_negative:FEEDBACK_NEG_TYPES.includes(name),sort_order:i}));
+    if(payload.length){
+      const insRes=await fetch(SUPA_URL+'/rest/v1/feedback_tags',{method:'POST',headers,body:JSON.stringify(payload)});
+      if(!insRes.ok) throw new Error(await insRes.text());
+    }
+    showToast('✅ Feedback tags saved — live for everyone now');
+  }catch(e){
+    showToast('❌ Save failed — has the feedback_tags table been created in Supabase?');
+  }
+  if(btn){btn.textContent='💾 Save Changes';btn.disabled=false;}
+  renderMain();
+}
+
 
 function pgAnnouncementsAdmin(){
   loadAnnouncementsAdmin();
