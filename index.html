@@ -1599,14 +1599,17 @@ async function loadSupervisorReportsStatus(){
 // ═══════════════════════════════════════════════════
 function pgDestinations(){
   if(realDestCounts===null) loadRealDestCounts();
-  const cards=DB.destinations.map(d=>`<div class="dest-card ${selectedDest===d.id?'sel':''}" onclick="selectedDest=${d.id};renderMain()">
+  const cards=DB.destinations.map(d=>{
+    const itinDays=(DB.itineraries&&DB.itineraries[d.id]&&DB.itineraries[d.id].length)||0;
+    return `<div class="dest-card ${selectedDest===d.id?'sel':''}" onclick="selectedDest=${d.id};renderMain()">
     <div style="font-size:1.6rem">${d.flag}</div><div style="font-size:0.88rem;font-weight:600;color:var(--green)">${d.name}</div>
     <div style="font-size:0.68rem;color:var(--slate);margin-top:2px">${d.country} · ${d.program}</div>
     <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">
-      <span class="badge ${d.flightStatus==='Confirmed'?'b-green':d.flightStatus==='Delayed'?'b-red':'b-amber'}" style="font-size:0.63rem">${d.flightStatus}</span>
+      <span class="badge ${d.flightStatus==='Confirmed'?'b-green':d.flightStatus==='Delayed'?'b-red':'b-amber'}" style="font-size:0.63rem">✈️ Flight: ${d.flightStatus}</span>
+      <span class="badge ${itinDays?'b-green':'b-red'}" style="font-size:0.63rem">🗺️ ${itinDays?`Itinerary: ${itinDays} days`:'No itinerary yet'}</span>
       <span class="badge b-gray" style="font-size:0.63rem">${realDestCounts===null?'…':realCountFor(d.id)} / ${d.students||0} added</span>
     </div>
-  </div>`).join('');
+  </div>`;}).join('');
   const sel=DB.destinations.find(d=>d.id===selectedDest);
   const selSups=sel?USERS.filter(u=>u.role==='supervisor'&&sel.supervisorIds&&sel.supervisorIds.includes(u.id)):[];
   return `<div class="ph"><h1 data-i18n="title_destinationsall">🌍 All Destinations</h1></div>
