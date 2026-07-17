@@ -1575,6 +1575,12 @@ async function runMemberSyncCheck(){
   const el=document.getElementById('mem-sync-check');
   if(!el) return;
   try{
+    // Wait for the real members load (a network round-trip) to actually
+    // finish before comparing — otherwise this compares Supabase against an
+    // app state that hasn't loaded yet and reports every role as "missing".
+    let waited=0;
+    while(!membersLoaded && waited<8000){ await new Promise(r=>setTimeout(r,100)); waited+=100; }
+    if(!document.getElementById('mem-sync-check')) return; // page navigated away while waiting
     const dbRows=await supaFetch('members?select=id,role,username');
     const dbByRole={},appByRole={};
     (dbRows||[]).forEach(r=>{ dbByRole[r.role]=(dbByRole[r.role]||0)+1; });
