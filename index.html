@@ -2433,10 +2433,21 @@ async function downloadDailyReport(destId){
   const d=DB.destinations.find(x=>x.id===destId);if(!d)return;
   showToast('Fetching daily report — '+d.name+'...');
   try{
-    const rows=await supaFetch(`daily_reports?select=*&destination=eq.${encodeURIComponent(d.name)}&day=eq.${encodeURIComponent(currentDay)}&order=submitted_at.desc`);
-    if(!rows||!rows.length){ showToast('⚠️ No report submitted yet for '+d.name+' on '+currentDay); return; }
-    const out=[['Supervisor','Destination','Day','Student Count','Academic Sessions','Activities','Health & Wellbeing','Incidents','Tomorrow Prep','Submitted']];
-    rows.forEach(r=>out.push([r.supervisor_name,r.destination,r.day,r.student_count,r.academic_sessions,r.activities,r.health_wellbeing,r.incidents,r.tomorrow_prep,new Date(r.submitted_at).toLocaleString()]));
+    const [rows,incs]=await Promise.all([
+      supaFetch(`daily_reports?select=*&destination=eq.${encodeURIComponent(d.name)}&day=eq.${encodeURIComponent(currentDay)}&order=submitted_at.desc`),
+      supaFetch(`incidents?select=*&destination=eq.${encodeURIComponent(d.name)}&day=eq.${encodeURIComponent(currentDay)}&order=created_at.asc`)
+    ]);
+    if((!rows||!rows.length)&&(!incs||!incs.length)){ showToast('⚠️ No report or incidents for '+d.name+' on '+currentDay); return; }
+    const out=[[`Daily Report — ${d.name} — ${currentDay}`],[]];
+    out.push(['SUPERVISOR REPORT']);
+    out.push(['Supervisor','Destination','Day','Student Count','Academic Sessions','Activities','Health & Wellbeing','Report Notes (incidents)','Tomorrow Prep','Submitted']);
+    (rows||[]).forEach(r=>out.push([r.supervisor_name,r.destination,r.day,r.student_count,r.academic_sessions,r.activities,r.health_wellbeing,r.incidents,r.tomorrow_prep,new Date(r.submitted_at).toLocaleString()]));
+    if(!rows||!rows.length) out.push(['No report submitted for this day']);
+    out.push([]);
+    out.push(['INCIDENT LOG']);
+    out.push(['Time','Severity','Type','Student','Description','Action Taken','Reported By','Logged At']);
+    (incs||[]).forEach(r=>out.push([r.time,r.severity,r.type,r.student_uid?`${r.student_uid} ${r.student_name||''}`:'—',r.description,r.action_taken,r.reported_by_name,r.created_at?new Date(r.created_at).toLocaleString():'']));
+    if(!incs||!incs.length) out.push(['No incidents reported for this day']);
     csvDownload(out,`daily_report_${d.name.replace(/[^a-z0-9]+/gi,'_')}_${currentDay.replace(/\s+/g,'')}.csv`);
     showToast('✅ Downloaded');
   }catch(e){ showToast('❌ Error fetching report: '+e.message); }
@@ -2445,9 +2456,10 @@ async function downloadFullReport(destId){
   const d=DB.destinations.find(x=>x.id===destId);if(!d)return;
   showToast('Building full report — '+d.name+'...');
   try{
-    const [reports,students]=await Promise.all([
+    const [reports,students,incs]=await Promise.all([
       supaFetch(`daily_reports?select=*&destination=eq.${encodeURIComponent(d.name)}&order=day.asc`),
-      supaFetch(`students?select=*,documents(*),flights(*),guardians(*)&destination_id=eq.${destId}`)
+      supaFetch(`students?select=*,documents(*),flights(*),guardians(*)&destination_id=eq.${destId}`),
+      supaFetch(`incidents?select=*&destination=eq.${encodeURIComponent(d.name)}&order=created_at.asc`)
     ]);
     const out=[[`Full Report — ${d.name}`],[`Generated ${new Date().toLocaleString()}`],[]];
     out.push(['STUDENT ROSTER']);
@@ -2460,9 +2472,14 @@ async function downloadFullReport(destId){
     });
     out.push([]);
     out.push(['SUPERVISOR DAILY REPORTS']);
-    out.push(['Day','Supervisor','Student Count','Academic Sessions','Activities','Health & Wellbeing','Incidents','Tomorrow Prep','Submitted']);
+    out.push(['Day','Supervisor','Student Count','Academic Sessions','Activities','Health & Wellbeing','Report Notes (incidents)','Tomorrow Prep','Submitted']);
     (reports||[]).forEach(r=>out.push([r.day,r.supervisor_name,r.student_count,r.academic_sessions,r.activities,r.health_wellbeing,r.incidents,r.tomorrow_prep,new Date(r.submitted_at).toLocaleString()]));
-    if(!students?.length&&!reports?.length){ showToast('⚠️ No data found yet for '+d.name); return; }
+    out.push([]);
+    out.push(['INCIDENT LOG — ALL DAYS']);
+    out.push(['Day','Time','Severity','Type','Student','Description','Action Taken','Reported By','Logged At']);
+    (incs||[]).forEach(r=>out.push([r.day,r.time,r.severity,r.type,r.student_uid?`${r.student_uid} ${r.student_name||''}`:'—',r.description,r.action_taken,r.reported_by_name,r.created_at?new Date(r.created_at).toLocaleString():'']));
+    if(!incs||!incs.length) out.push(['No incidents reported for this destination']);
+    if(!students?.length&&!reports?.length&&!incs?.length){ showToast('⚠️ No data found yet for '+d.name); return; }
     csvDownload(out,`full_report_${d.name.replace(/[^a-z0-9]+/gi,'_')}.csv`);
     showToast('✅ Downloaded');
   }catch(e){ showToast('❌ Error building report: '+e.message); }
