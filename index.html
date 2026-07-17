@@ -2694,7 +2694,6 @@ function pgStudents(){
     <button class="btn btn-primary" onclick="openAddStudentModal()">+ Add Student</button>
     <button class="btn" onclick="openBulkUploadModal()">📤 Bulk Upload</button>
     <button class="btn" onclick="exportStudentsCSV()">⬇ Export CSV</button>
-    <button class="btn" onclick="generateMissingStudentLogins()">🔑 Generate Missing Logins</button>
     <button class="btn btn-danger" id="stu-bulkdel-btn" onclick="bulkDeleteStudents()" style="display:none">🗑 Delete Selected (<span id="stu-bulkdel-count">0</span>)</button>
     <select id="stu-dest-filter" onchange="filterStudents()" style="padding:6px 11px;border:1px solid var(--border);border-radius:7px;font-size:0.8rem;font-family:inherit"><option value="">All cohorts</option>${destOpts}</select>
     <input id="stu-search" placeholder="🔍 Search..." style="padding:6px 11px;border:1px solid var(--border);border-radius:7px;font-size:0.8rem;font-family:inherit;flex:1;min-width:140px;" oninput="filterStudents()">
@@ -2726,10 +2725,45 @@ async function loadStudents(){
     renderStudentTable(studentsList);
     const el=document.getElementById('stu-count');
     if(el) el.textContent=studentsList.length+' students';
+    autoBackfillStudentLogins(); // fire-and-forget, runs quietly in the background
   } catch(e){
     const tb=document.getElementById('stu-tbody');
     if(tb) tb.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--red)">Error loading: ${e.message}</td></tr>`;
   }
+}
+// Auto-generates login credentials for any student missing them — runs
+// silently every time the Students page loads (after bulk uploads, after
+// adding students individually, etc.) so nobody needs to remember to click
+// a button. Requests are spaced out with a short delay between each one,
+// since firing them all at once was hitting Supabase's rate limit and
+// silently dropping most of the batch (only 5-6 succeeding at a time).
+let studentLoginBackfillRunning=false;
+async function autoBackfillStudentLogins(){
+  if(studentLoginBackfillRunning) return;
+  const missing=studentsList.filter(s=>!s.username);
+  if(!missing.length) return;
+  studentLoginBackfillRunning=true;
+  let success=0,fail=0;
+  for(let i=0;i<missing.length;i++){
+    const s=missing[i];
+    const uname0=(s.name||'').trim().split(/\s+/).map(w=>w.toLowerCase().replace(/[^a-z]/g,'')).filter(Boolean).slice(0,2).join('.');
+    let uname=uname0||'student'+s.id, tries=0;
+    while(USERS.some(u=>u.username.toLowerCase()===uname.toLowerCase())&&tries<20){ uname=uname0+Math.floor(10+Math.random()*89); tries++; }
+    const pass='Stud@'+Math.floor(1000+Math.random()*9000);
+    const uid=s.uid||('STU'+String(Date.now()).slice(-6)+i);
+    try{
+      await supaFetch('students?id=eq.'+s.id,'PATCH',{username:uname,password:pass,uid});
+      s.username=uname; s.password=pass; s.uid=uid;
+      if(!USERS.some(u=>u.username.toLowerCase()===uname.toLowerCase())){
+        USERS.push({id:'stu_'+s.id,username:uname,password:pass,name:s.name,role:'student',destId:s.destination_id||0,uid,initials:getInitials({name:s.name})});
+      }
+      success++;
+    }catch(e){ fail++; }
+    await new Promise(r=>setTimeout(r,180)); // small gap between requests to avoid rate-limiting
+  }
+  studentLoginBackfillRunning=false;
+  if(success) showToast(`🔑 Auto-generated logins for ${success} student(s)${fail?`, ${fail} failed — will retry next visit`:''}`);
+  if(currentSection==='students') renderStudentTable(studentsList);
 }
 function toggleAllStudents(checked){
   const visibleIds=(window._lastRenderedStudentIds||[]);
@@ -3152,6 +3186,11 @@ function openViewStudentModal(id){
       <div class="ii"><div class="il">School</div><div class="iv">${s.school_name||'—'}</div></div>
       <div class="ii"><div class="il">Added</div><div class="iv">${new Date(s.created_at).toLocaleDateString()}</div></div>
     </div>
+    <div style="font-size:0.78rem;font-weight:600;color:var(--slate);margin-bottom:8px">🔑 LOGIN CREDENTIALS</div>
+    <div class="info-grid" style="margin-bottom:14px">
+      <div class="ii"><div class="il">Username</div><div class="iv" style="font-family:monospace">${s.username||'⚠️ Not generated yet'}</div></div>
+      <div class="ii"><div class="il">Password</div><div class="iv" style="font-family:monospace">${s.password||'⚠️ Not generated yet'}</div></div>
+    </div>
     <div style="font-size:0.78rem;font-weight:600;color:var(--slate);margin-bottom:8px">📄 DOCUMENTS</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
       ${docs.passport_copy?`<a href="${docs.passport_copy}" target="_blank" class="btn btn-sm">🛂 Passport Copy</a>`:'<span style="font-size:0.78rem;color:var(--slate)">No passport copy</span>'}
@@ -3215,33 +3254,6 @@ function exportStudentsCSV(){
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
   a.download='students_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
   showToast('✅ CSV exported!');
-}
-// One-time catch-up for students that were added before login credentials
-// existed as a feature — finds anyone in the table with no username yet and
-// generates one, so nobody gets permanently left without a login.
-async function generateMissingStudentLogins(){
-  const missing=studentsList.filter(s=>!s.username);
-  if(!missing.length){ showToast('✅ Every student already has a login'); return; }
-  if(!confirm(`${missing.length} student(s) don't have login credentials yet. Generate them now?`)) return;
-  let success=0,fail=0;
-  for(let i=0;i<missing.length;i++){
-    const s=missing[i];
-    const uname0=(s.name||'').trim().split(/\s+/).map(w=>w.toLowerCase().replace(/[^a-z]/g,'')).filter(Boolean).slice(0,2).join('.');
-    let uname=uname0||'student'+s.id, tries=0;
-    while(USERS.some(u=>u.username.toLowerCase()===uname.toLowerCase())&&tries<20){ uname=uname0+Math.floor(10+Math.random()*89); tries++; }
-    const pass='Stud@'+Math.floor(1000+Math.random()*9000);
-    const uid=s.uid||('STU'+String(Date.now()).slice(-6)+i);
-    try{
-      await supaFetch('students?id=eq.'+s.id,'PATCH',{username:uname,password:pass,uid});
-      s.username=uname; s.password=pass; s.uid=uid;
-      if(!USERS.some(u=>u.username.toLowerCase()===uname.toLowerCase())){
-        USERS.push({id:'stu_'+s.id,username:uname,password:pass,name:s.name,role:'student',destId:s.destination_id||0,uid,initials:getInitials({name:s.name})});
-      }
-      success++;
-    }catch(e){ fail++; }
-  }
-  showToast(`✅ Generated logins for ${success} student(s)${fail?`, ${fail} failed`:''}`);
-  renderStudentTable(studentsList);
 }
 
 
