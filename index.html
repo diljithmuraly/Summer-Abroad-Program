@@ -549,13 +549,29 @@ function readCSVFileSmart(file, onLoaded){
   reader.readAsArrayBuffer(file);
 }
 
+// Handles team_lead coming back as a real boolean OR as text ("true"/"false")
+// — if the DB column was ever TEXT instead of BOOLEAN, the string "false" is
+// still a non-empty string and !!"false" is true in JS, which is exactly why
+// every supervisor was showing as a Team Lead.
+function toBool(v){
+  if(typeof v==='boolean') return v;
+  if(v==null) return false;
+  return ['true','yes','1','y'].includes(String(v).trim().toLowerCase());
+}
 async function loadMembersFromSupabase(){
   try{
     const rows=await supaFetch('members?select=*&order=created_at.asc');
     (rows||[]).forEach(r=>{
-      // skip if a member with this username is already present (avoids dupes on re-run)
-      if(USERS.some(u=>u.username.toLowerCase()===r.username.toLowerCase())) return;
-      USERS.push({id:'mem_'+r.id,username:r.username,password:r.password,name:r.name,role:r.role,destId:r.destination_id||0,uid:r.uid,teamLead:!!r.team_lead,initials:r.initials||''});
+      // Guard each row individually — one malformed row (e.g. a null
+      // username) used to throw inside this loop and silently abort every
+      // row after it, which is why later-inserted members (often the PMO
+      // rows at the end of a batch) would vanish after a refresh.
+      try{
+        if(!r||!r.username) return;
+        // skip if a member with this username is already present (avoids dupes on re-run)
+        if(USERS.some(u=>u.username.toLowerCase()===r.username.toLowerCase())) return;
+        USERS.push({id:'mem_'+r.id,username:r.username,password:r.password,name:r.name,role:r.role,destId:r.destination_id||0,uid:r.uid,teamLead:toBool(r.team_lead),initials:r.initials||''});
+      }catch(rowErr){ console.error('Skipped malformed member row:',r,rowErr); }
     });
   }catch(e){ /* Supabase members table may not exist yet — fails silently, demo accounts still work */ }
   membersLoaded=true;
