@@ -754,6 +754,7 @@ const SIDEBAR={
     {ic:'✈️',label:'Flights & Visas',id:'flightsvisa'},{ic:'✅',label:'Checklist Editor',id:'checklisteditor'},
     {ic:'📅',label:'Schedule Editor',id:'scheduleeditor'},{ic:'📝',label:'Feedback Manager',id:'feedbackadmin'},
     {ic:'📣',label:'Announcements',id:'announcementsadmin'},{ic:'📊',label:'Reports',id:'reports'},
+    {ic:'🚨',label:'Incident Log',id:'incidentsadmin'},
     {ic:'⚙️',label:'Settings',id:'settings'},
   ]}],
 };
@@ -781,7 +782,7 @@ function renderMain(){
     destinations:pgDestinations,members:pgMembers,flightsvisa:pgFlightsVisa,
     checklisteditor:pgChecklistEditor,scheduleeditor:pgScheduleEditor,
     feedbackadmin:pgFeedbackAdmin,announcementsadmin:pgAnnouncementsAdmin,
-    reports:pgReports,settings:pgSettings,students:pgStudents,itinerary:pgItinerary,
+    reports:pgReports,settings:pgSettings,students:pgStudents,itinerary:pgItinerary,incidentsadmin:pgIncidentsAdmin,
   };
   const fn=fns[currentSection];
   document.getElementById('main').innerHTML=fn?fn():'<div class="ph"><h1>Coming soon</h1></div>';
@@ -1192,14 +1193,15 @@ function skipFeedbackPopup(){
 function pgIncidents(){
   const dayNav=renderDayNav();
   const incs=incidentLogs[currentDay]||[];
-  const logHtml=incs.length?`<div style="font-size:0.74rem;font-weight:600;color:var(--red);margin:10px 0 6px">📋 Logged today (${incs.length})</div>`+
+  setTimeout(()=>loadIncidentsForDay(currentDay),50);
+  const logHtml=`<div id="inc-log-list">${incs.length?`<div style="font-size:0.74rem;font-weight:600;color:var(--red);margin:10px 0 6px">📋 Logged today (${incs.length})</div>`+
     incs.map(inc=>`<div style="background:var(--white);border:1px solid #E8B0AA;border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:0.78rem">
-      <strong>${inc.type}</strong> <span class="sev-badge sev-${inc.sev}">${inc.sev.toUpperCase()}</span>
+      <strong>${inc.type}</strong> <span class="sev-badge sev-${inc.sev}">${(inc.sev||'').toUpperCase()}</span>
       ${inc.studentUid?` · <span class="uid-badge">${inc.studentUid}</span> ${inc.studentName||''}`:''} · ${inc.time||inc.ts}
       <div style="margin-top:4px">${inc.desc}</div>
       ${inc.action?`<div style="color:var(--green);margin-top:3px">✅ ${inc.action}</div>`:''}
       <div style="color:var(--slate);font-size:0.68rem;margin-top:3px">Reported to: PMO</div>
-    </div>`).join(''):'';
+    </div>`).join(''):'<div style="font-size:0.74rem;color:var(--slate);margin-top:6px">Loading logged incidents…</div>'}</div>`;
   return `<div class="ph"><h1 data-i18n="title_incidents">🚨 Incident Log</h1></div>
   <div class="day-nav">${dayNav}</div>
   <div class="incident-card">
@@ -1231,6 +1233,85 @@ function pgIncidents(){
     </div>
   </div>`;
 }
+// Loads real incidents for the given day from Supabase into the in-memory
+// incidentLogs cache, then re-renders just the list (not the whole page, to
+// avoid disrupting the form the user might be filling in).
+async function loadIncidentsForDay(day){
+  try{
+    const rows=await supaFetch(`incidents?select=*&day=eq.${encodeURIComponent(day)}&order=created_at.desc`);
+    incidentLogs[day]=(rows||[]).map(r=>({
+      time:r.time, sev:r.severity, type:r.type, studentUid:r.student_uid, studentName:r.student_name,
+      desc:r.description, action:r.action_taken, reportedTo:r.reported_to, ts:new Date(r.created_at).toLocaleTimeString(),
+      reportedBy:r.reported_by_name
+    }));
+  }catch(e){ /* leave whatever was already in memory (e.g. one just logged this session) */ }
+  if(currentSection==='incidents'){
+    const el=document.getElementById('inc-log-list');
+    if(el){
+      const incs=incidentLogs[day]||[];
+      el.innerHTML=incs.length?`<div style="font-size:0.74rem;font-weight:600;color:var(--red);margin:10px 0 6px">📋 Logged today (${incs.length})</div>`+
+        incs.map(inc=>`<div style="background:var(--white);border:1px solid #E8B0AA;border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:0.78rem">
+          <strong>${inc.type}</strong> <span class="sev-badge sev-${inc.sev}">${(inc.sev||'').toUpperCase()}</span>
+          ${inc.studentUid?` · <span class="uid-badge">${inc.studentUid}</span> ${inc.studentName||''}`:''} · ${inc.time||inc.ts}
+          <div style="margin-top:4px">${inc.desc}</div>
+          ${inc.action?`<div style="color:var(--green);margin-top:3px">✅ ${inc.action}</div>`:''}
+          <div style="color:var(--slate);font-size:0.68rem;margin-top:3px">Reported to: PMO${inc.reportedBy?' · by '+inc.reportedBy:''}</div>
+        </div>`).join('')
+        :'<div style="font-size:0.74rem;color:var(--slate);margin-top:6px">No incidents logged for this day.</div>';
+    }
+  }
+}
+// Admin-facing view of every incident ever logged, across all destinations
+// and days — previously there was no way for the admin to see incidents at
+// all, since the old version never saved them anywhere.
+let adminIncidentsList=[];
+async function pgIncidentsAdmin(){
+  setTimeout(loadAllIncidentsForAdmin,50);
+  return `<div class="ph"><h1>🚨 Incident Log — All Destinations</h1><p>Every incident reported by supervisors and PMO staff</p></div>
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+    <button class="btn btn-primary" onclick="loadAllIncidentsForAdmin()">🔄 Refresh</button>
+    <select id="inc-admin-sev-filter" onchange="renderAdminIncidents()" style="padding:6px 11px;border:1px solid var(--border);border-radius:7px;font-size:0.8rem;font-family:inherit;">
+      <option value="">All severities</option>
+      <option value="low">Low</option><option value="med">Medium</option><option value="high">High</option><option value="critical">Critical</option>
+    </select>
+  </div>
+  <div class="card"><div class="ch" style="cursor:default"><span>📋</span><span class="ct">Incidents</span><span class="cbadge" id="inc-admin-count">Loading...</span></div>
+  <div class="cb" style="padding:0;overflow-x:auto">
+    <table class="sch-tbl" style="min-width:900px">
+      <thead><tr><th>Day</th><th>Destination</th><th>Severity</th><th>Type</th><th>Student</th><th>Description</th><th>Action Taken</th><th>Reported By</th><th>When</th></tr></thead>
+      <tbody id="inc-admin-tbody"><tr><td colspan="9" style="text-align:center;padding:20px;color:var(--slate)">Loading incidents...</td></tr></tbody>
+    </table>
+  </div></div>`;
+}
+async function loadAllIncidentsForAdmin(){
+  try{
+    adminIncidentsList=await supaFetch('incidents?select=*&order=created_at.desc');
+    renderAdminIncidents();
+  }catch(e){
+    const tb=document.getElementById('inc-admin-tbody');
+    if(tb) tb.innerHTML=`<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--red)">Error loading incidents: ${e.message}</td></tr>`;
+  }
+}
+function renderAdminIncidents(){
+  const tb=document.getElementById('inc-admin-tbody');
+  if(!tb) return;
+  const sevFilter=document.getElementById('inc-admin-sev-filter')?.value||'';
+  const list=sevFilter?adminIncidentsList.filter(r=>r.severity===sevFilter):adminIncidentsList;
+  const badge=document.getElementById('inc-admin-count');
+  if(badge) badge.textContent=list.length+' incidents';
+  if(!list.length){ tb.innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--slate)">No incidents reported yet.</td></tr>'; return; }
+  tb.innerHTML=list.map(r=>`<tr>
+    <td><span class="badge b-gray">${r.day||'—'}</span></td>
+    <td style="font-size:0.78rem">${r.destination||'—'}</td>
+    <td><span class="sev-badge sev-${r.severity}">${(r.severity||'').toUpperCase()}</span></td>
+    <td style="font-size:0.78rem">${r.type||'—'}</td>
+    <td style="font-size:0.78rem">${r.student_uid?`<span class="uid-badge">${r.student_uid}</span> ${r.student_name||''}`:'—'}</td>
+    <td style="font-size:0.76rem;max-width:220px">${r.description||'—'}</td>
+    <td style="font-size:0.76rem;color:var(--green);max-width:180px">${r.action_taken||'—'}</td>
+    <td style="font-size:0.76rem">${r.reported_by_name||'—'}${r.reported_by_role?` (${r.reported_by_role})`:''}</td>
+    <td style="font-size:0.72rem;color:var(--slate);white-space:nowrap">${r.created_at?new Date(r.created_at).toLocaleString():'—'}</td>
+  </tr>`).join('');
+}
 let incBodyOpen=true;
 function toggleIncBody(){incBodyOpen=!incBodyOpen;const b=document.getElementById('inc-form-body');const a=document.getElementById('inc-toggle-arrow');if(b)b.style.display=incBodyOpen?'block':'none';if(a)a.textContent=incBodyOpen?'▼':'▶';}
 
@@ -1247,21 +1328,33 @@ function lookupStudentInc(val){
   }
 }
 
-function logInc(){
+async function logInc(){
   const desc=document.getElementById('inc-desc')?.value;
   if(!desc||!desc.trim()){showToast('⚠️ Enter incident description');return;}
   const uidVal=document.getElementById('inc-uid')?.value||'';
   const u=uidVal?USERS.find(x=>x.role==='student'&&((x.uid&&x.uid.toLowerCase()===uidVal.trim().toLowerCase())||(uidVal.length>=3&&x.name.toLowerCase().includes(uidVal.trim().toLowerCase())))):null;
-  if(!incidentLogs[currentDay])incidentLogs[currentDay]=[];
-  incidentLogs[currentDay].push({
+  const d=myDest();
+  const entry={
     time:document.getElementById('inc-time')?.value,
     sev:document.getElementById('inc-sev')?.value,
     type:document.getElementById('inc-type')?.value,
     studentUid:u?u.uid:uidVal,studentName:u?u.name:'',
     desc,action:document.getElementById('inc-action')?.value,
     reportedTo:'PMO',ts:new Date().toLocaleTimeString()
-  });
+  };
+  if(!incidentLogs[currentDay])incidentLogs[currentDay]=[];
+  incidentLogs[currentDay].unshift(entry); // show immediately, don't wait on the network
   showToast('🚨 Incident logged — reported to PMO');renderMain();
+  try{
+    await supaFetch('incidents','POST',{
+      day:currentDay, time:entry.time, severity:entry.sev, type:entry.type,
+      student_uid:entry.studentUid, student_name:entry.studentName,
+      destination:d?d.name:'', description:entry.desc, action_taken:entry.action,
+      reported_to:'PMO', reported_by_name:currentUser?currentUser.name:'', reported_by_role:currentUser?currentUser.role:''
+    });
+  }catch(e){
+    showToast('⚠️ Saved on screen, but failed to save to database: '+e.message);
+  }
 }
 function clearInc(){['inc-time','inc-uid','inc-desc','inc-action'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});const r=document.getElementById('inc-uid-result');if(r)r.textContent='';}
 
@@ -1423,15 +1516,36 @@ function pgVisasAll(){
 
 function pgSupervisors(){
   const dests=visibleDestinations();
+  setTimeout(loadSupervisorReportsStatus,50);
   return `<div class="ph"><h1 data-i18n="title_supervisorsreports">📊 Supervisor Reports</h1></div>
-  <div class="card"><div class="ch" style="cursor:default"><span>📋</span><span class="ct">Daily reports</span></div>
-  <div class="cb">${dests.map(d=>{const sup=USERS.find(u=>u.role==='supervisor'&&u.destId===d.id);
-    return `<div class="mr"><div style="font-size:1.3rem">${d.flag}</div>
+  <div class="card"><div class="ch" style="cursor:default"><span>📋</span><span class="ct">Daily reports — ${currentDay}</span></div>
+  <div class="cb" id="sup-reports-list">${dests.map(d=>{const sup=USERS.find(u=>u.role==='supervisor'&&u.destId===d.id);
+    return `<div class="mr" id="sup-report-row-${d.id}"><div style="font-size:1.3rem">${d.flag}</div>
     <div style="flex:1"><div class="mn">${sup?sup.name:'—'}</div><div class="msub">${d.name} · ${destStudents(d.id).length} students</div></div>
-    <div style="display:flex;gap:5px"><span class="badge b-green">Submitted</span>
-    <button class="btn btn-sm" onclick="showToast('Viewing report: ${d.name}')">👁</button>
-    <button class="btn btn-sm btn-amber" onclick="showToast('Feedback sent')">💬</button></div>
+    <div style="display:flex;gap:5px"><span class="badge b-gray">Loading...</span></div>
     </div>`;}).join('')}</div></div>`;
+}
+async function loadSupervisorReportsStatus(){
+  try{
+    const rows=await supaFetch(`daily_reports?select=*&day=eq.${encodeURIComponent(currentDay)}&order=submitted_at.desc`);
+    reportsList=rows||[]; // reuse the same list viewReport() reads from
+    visibleDestinations().forEach(d=>{
+      const row=document.getElementById('sup-report-row-'+d.id);
+      if(!row) return;
+      const report=reportsList.find(r=>r.destination===d.name);
+      const actions=row.querySelector('div[style*="display:flex"]');
+      if(!actions) return;
+      actions.innerHTML=report
+        ? `<span class="badge b-green">Submitted</span><button class="btn btn-sm" onclick="viewReport('${report.id}')">👁 View</button>`
+        : `<span class="badge b-amber">Not submitted</span>`;
+    });
+  }catch(e){
+    visibleDestinations().forEach(d=>{
+      const row=document.getElementById('sup-report-row-'+d.id);
+      const actions=row&&row.querySelector('div[style*="display:flex"]');
+      if(actions) actions.innerHTML=`<span class="badge b-red">Error</span>`;
+    });
+  }
 }
 
 // ═══════════════════════════════════════════════════
