@@ -935,21 +935,58 @@ async function loadAnnouncements(){
     announcementsList=[]; // table may not exist yet — shows "no announcements" rather than erroring
   }
   renderAnnouncementsList();
+  renderPendingAnnouncements();
 }
 function renderAnnouncementsList(){
   const el=document.getElementById('ann-list');
   if(!el) return;
   const d=myDest();
-  const anns=(announcementsList||[]).filter(a=>!a.destination_id||(d&&a.destination_id===d.id));
+  const anns=(announcementsList||[]).filter(a=>(!a.destination_id||(d&&a.destination_id===d.id))&&!a.pending_review&&!a.dismissed);
   el.innerHTML=anns.length
     ? anns.map(a=>`<div class="ann"><div class="at">${a.text}</div><div class="atm">🕐 ${a.time_label||new Date(a.created_at).toLocaleString()}</div></div>`).join('')
     : `<div style="padding:14px;color:var(--slate);font-size:0.82rem;text-align:center">No announcements yet.</div>`;
 }
 function pgAnnouncements(){
   loadAnnouncements();
+  const isSupervisorLike=currentUser.role==='supervisor'||currentUser.role==='pm';
+  const pendingPanel=isSupervisorLike?`<div class="card" style="margin-bottom:6px"><div class="ch" style="cursor:default"><span>📋</span><span class="ct">Pending review — from admin</span><span class="cbadge" id="ann-pending-count">Loading...</span></div>
+  <div class="cb" id="ann-pending-list" style="padding:12px 15px;color:var(--slate);font-size:0.82rem">Loading…</div></div>`:'';
   return `<div class="ph"><h1 data-i18n="title_announcements">📣 Announcements</h1></div>
+  ${pendingPanel}
   <div class="card"><div class="ch" style="cursor:default"><span>🔔</span><span class="ct">Latest announcements</span></div>
   <div class="cb" id="ann-list" style="padding:12px 15px;color:var(--slate);font-size:0.82rem">Loading…</div></div>`;
+}
+function renderPendingAnnouncements(){
+  const el=document.getElementById('ann-pending-list');
+  const badge=document.getElementById('ann-pending-count');
+  if(!el) return; // not a supervisor/pm view
+  const d=myDest();
+  const pending=(announcementsList||[]).filter(a=>a.pending_review&&!a.dismissed&&d&&a.destination_id===d.id);
+  if(badge) badge.textContent=pending.length+' pending';
+  el.innerHTML=pending.length
+    ? pending.map(a=>`<div style="background:var(--mist);border-radius:8px;padding:10px 12px;margin-bottom:8px">
+        <div style="font-size:0.82rem;font-weight:500;margin-bottom:6px">${a.text}</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-primary" onclick="forwardAnn('${a.id}')">✅ Forward to my students</button>
+          <button class="btn btn-sm" onclick="dismissAnn('${a.id}')">🚫 Don't forward</button>
+        </div>
+      </div>`).join('')
+    : `<div style="text-align:center;padding:6px;color:var(--slate)">Nothing waiting for review.</div>`;
+}
+async function forwardAnn(id){
+  try{
+    await supaFetch('announcements?id=eq.'+id,'PATCH',{pending_review:false,forwarded_by:currentUser.name});
+    showToast('✅ Forwarded to your students');
+    loadAnnouncements();
+  }catch(e){ showToast('❌ Error: '+e.message); }
+}
+async function dismissAnn(id){
+  if(!confirm("Don't forward this to your students? It will stay hidden from them.")) return;
+  try{
+    await supaFetch('announcements?id=eq.'+id,'PATCH',{dismissed:true});
+    showToast('🚫 Dismissed — not forwarded');
+    loadAnnouncements();
+  }catch(e){ showToast('❌ Error: '+e.message); }
 }
 
 function pgTravel(){
@@ -2437,12 +2474,17 @@ async function loadAnnouncementsAdmin(){
   const el=document.getElementById('ann-admin-list');
   if(!el) return;
   if(!announcementsList.length){ el.innerHTML='<div style="text-align:center;padding:10px">No announcements yet — click + Add to create one.</div>'; return; }
-  el.innerHTML=announcementsList.map(a=>`<div style="display:flex;align-items:flex-start;gap:9px;padding:10px 0;border-bottom:1px solid var(--border)">
+  el.innerHTML=announcementsList.map(a=>{
+    const status=a.dismissed?'<span class="badge b-red">Dismissed by supervisor</span>'
+      :a.pending_review?'<span class="badge b-amber">⏳ Awaiting supervisor review</span>'
+      :`<span class="badge b-green">✅ Live${a.forwarded_by?' — forwarded by '+a.forwarded_by:''}</span>`;
+    return `<div style="display:flex;align-items:flex-start;gap:9px;padding:10px 0;border-bottom:1px solid var(--border)">
     <div style="flex:1"><div style="font-size:0.82rem;font-weight:500">${a.text}</div>
-    <div style="font-size:0.68rem;color:var(--slate);margin-top:2px">${a.time_label||new Date(a.created_at).toLocaleString()} · ${!a.destination_id?'All destinations':DB.destinations.find(d=>d.id===a.destination_id)?.name||'—'}</div></div>
+    <div style="font-size:0.68rem;color:var(--slate);margin-top:2px">${a.time_label||new Date(a.created_at).toLocaleString()} · ${!a.destination_id?'All destinations':DB.destinations.find(d=>d.id===a.destination_id)?.name||'—'}</div>
+    <div style="margin-top:4px">${status}</div></div>
     <button class="btn btn-sm" onclick="openEditAnnModal('${a.id}')">✏️</button>
     <button class="btn btn-sm btn-danger" onclick="deleteAnn('${a.id}')">🗑</button>
-  </div>`).join('');
+  </div>`;}).join('');
 }
 function openAddAnnModal(){
   const dests=DB.destinations.map(d=>`<option value="${d.id}">${d.flag} ${d.name}</option>`).join('');
@@ -2450,6 +2492,7 @@ function openAddAnnModal(){
     <div class="form-row"><div class="fg-n"><label>Message</label><textarea id="an-text" placeholder="Announcement text..." style="min-height:80px"></textarea></div></div>
     <div class="form-row"><div class="fg-n"><label>Destination</label><select id="an-dest"><option value="0">All destinations</option>${dests}</select></div>
     <div class="fg-n"><label>Time label</label><input id="an-time" value="Today"></div></div>
+    <div style="font-size:0.74rem;color:var(--slate);margin-top:4px">📋 If you pick a specific destination, that cohort's supervisor will review it first and choose whether to forward it to students. "All destinations" publishes immediately.</div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">Cancel</button>
     <button class="btn btn-primary" onclick="saveNewAnn()">Add</button></div>`);
 }
@@ -2457,8 +2500,8 @@ async function saveNewAnn(){
   const text=v('an-text');if(!text){showToast('Text required');return;}
   const destId=parseInt(v('an-dest'))||0;
   try{
-    await supaFetch('announcements','POST',{text,time_label:v('an-time')||'Now',destination_id:destId||null});
-    showToast('✅ Added');closeModal();loadAnnouncementsAdmin();
+    await supaFetch('announcements','POST',{text,time_label:v('an-time')||'Now',destination_id:destId||null,pending_review:!!destId});
+    showToast(destId?'✅ Sent to supervisor for review':'✅ Published to all students');closeModal();loadAnnouncementsAdmin();
   }catch(e){ showToast('❌ Error: '+e.message); }
 }
 function openEditAnnModal(id){
