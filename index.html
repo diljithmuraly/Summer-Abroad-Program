@@ -1050,6 +1050,7 @@ function setDay(d){currentDay=d;renderMain();}
 
 function pgFeedback(){
   const students=currentUser.role==='supervisor'?myStudents():destStudents(selectedDest);
+  setTimeout(checkExistingFeedbackForDay,50);
   const dayNav=ALL_DAYS.slice(0,16).map(d=>`<button class="day-btn ${currentDay===d?'active':''}" onclick="setDay('${d}')">${d}</button>`).join('');
   const rows=students.map(s=>{
     const tags=FEEDBACK_TYPES.map(ft=>{
@@ -1074,7 +1075,17 @@ function pgFeedback(){
   <div class="cb" style="padding:0 15px 15px"><button class="btn btn-primary" onclick="submitDailyFeedback(this)">✅ Submit Daily Feedback — ${currentDay}</button></div>
   </div>`;
 }
+async function checkExistingFeedbackForDay(){
+  if(feedbackSubmittedDays[currentDay]) return; // already known from this session
+  try{
+    const rows=await supaFetch(`daily_feedback?select=id&day=eq.${encodeURIComponent(currentDay)}&supervisor_id=eq.${encodeURIComponent(currentUser.id)}`);
+    if(rows&&rows.length){ feedbackSubmittedDays[currentDay]='an earlier session'; if(currentSection==='feedback') renderMain(); }
+  }catch(e){ /* best-effort */ }
+}
 async function submitDailyFeedback(btn){
+  if(feedbackSubmittedDays[currentDay]){
+    if(!confirm(`You've already submitted feedback for ${currentDay}. Submit again anyway? This will add a second submission rather than replace the first.`)) return;
+  }
   const students=currentUser.role==='supervisor'?myStudents():destStudents(selectedDest);
   const summary={};
   students.forEach(s=>{
@@ -1092,6 +1103,8 @@ async function submitDailyFeedback(btn){
       feedback:JSON.stringify(summary),
     });
     feedbackSubmittedDays[currentDay]=new Date().toLocaleTimeString();
+    // clear the selections for this day so the form doesn't sit there half-filled after a successful submit
+    students.forEach(s=>{ FEEDBACK_TYPES.forEach(ft=>{ delete feedbackState[s.id+'_'+currentDay+'_'+ft]; }); });
     showToast('✅ Daily feedback submitted to PMO!');
   }catch(e){
     showToast('❌ Error submitting: '+e.message);
@@ -1395,6 +1408,7 @@ function saveBc(){
 }
 
 function pgReport(){
+  setTimeout(checkExistingReportForDay,50);
   return `<div class="ph"><h1 data-i18n="title_report">📊 Daily PMO Report</h1><p>Submit before 22:00</p></div>
   <div class="report-box"><h3>📊 Daily Report — ${currentDay}</h3><p>Complete all fields and submit to PMO</p>
     <div class="rpt-fields">
@@ -1404,13 +1418,23 @@ function pgReport(){
       <div class="rpt-field"><label>Health & wellbeing</label><textarea id="rpt-health" placeholder="Any health concerns, medications..."></textarea></div>
       <div class="rpt-field"><label>Incidents summary</label><textarea id="rpt-inc" placeholder="If none: 'No incidents reported'"></textarea></div>
       <div class="rpt-field"><label>Tomorrow's prep</label><input id="rpt-tmrw" placeholder="Confirmations needed..."></div>
-      <div class="rpt-field"><label>Supervisor name</label><input id="rpt-sig" value="${currentUser.name}" readonly disabled style="background:#f0f0f0;cursor:not-allowed" title="Locked to your logged-in account"></div>
+      <div class="rpt-field"><label>Supervisor name</label><input id="rpt-sig" value="${currentUser.name}" readonly disabled style="background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.6);cursor:not-allowed" title="Locked to your logged-in account"></div>
     </div>
     <button class="btn-gold" onclick="submitRpt()">📤 Submit to PMO</button>
     <div class="saved-box" id="saved-rpt"></div>
   </div>`;
 }
+let submittedReportDays=new Set();
+async function checkExistingReportForDay(){
+  try{
+    const rows=await supaFetch(`daily_reports?select=id&day=eq.${encodeURIComponent(currentDay)}&supervisor_id=eq.${encodeURIComponent(currentUser.id)}`);
+    if(rows&&rows.length) submittedReportDays.add(currentDay);
+  }catch(e){ /* best-effort — if this fails the in-memory Set still catches same-session resubmits */ }
+}
 async function submitRpt(){
+  if(submittedReportDays.has(currentDay)){
+    if(!confirm(`You've already submitted a report for ${currentDay}. Submit again anyway? This will add a second report rather than replace the first.`)) return;
+  }
   const sig=currentUser.name; // always the actual logged-in account — never trust the field value alone, since a shared device's browser autofill could carry over a different name
   const count=document.getElementById('rpt-count')?.value||'';
   const acad=document.getElementById('rpt-acad')?.value||'';
@@ -1434,6 +1458,8 @@ async function submitRpt(){
       incidents:inc,
       tomorrow_prep:tmrw
     });
+    submittedReportDays.add(currentDay);
+    ['rpt-count','rpt-acad','rpt-act','rpt-health','rpt-inc','rpt-tmrw'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     const box=document.getElementById('saved-rpt');
     if(box){box.style.display='block';box.innerHTML=`✅ ${currentDay} report submitted at ${new Date().toLocaleTimeString()} by <strong>${sig}</strong>`;}
     showToast('📊 Report saved to database!');
