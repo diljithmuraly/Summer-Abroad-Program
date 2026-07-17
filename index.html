@@ -1074,15 +1074,17 @@ function pgChecklist(){
   if(currentDay==='Day 0') checklist=DB.day0Checklist;
   else if(currentDay==='Day 15') checklist=DB.day15Checklist;
   else checklist=DB.checklistSections;
+  const d=myDest(); const destId=d?d.id:'none';
+  setTimeout(()=>loadChecklistProgress(destId,currentDay),50);
 
   let total=0,done=0;
-  checklist.forEach((s,si)=>s.items.forEach((_,ii)=>{total++;if(checkState[currentDay+'_'+si+'_'+ii])done++;}));
+  checklist.forEach((s,si)=>s.items.forEach((_,ii)=>{total++;if(checkState[currentDay+'_'+destId+'_'+si+'_'+ii])done++;}));
   const pct=total?Math.round(done/total*100):0;
   const label=currentDay==='Day 0'?'✈️ Departure from UAE':currentDay==='Day 15'?'✈️ Return to UAE':'Daily operations';
   const sections=checklist.map((s,si)=>{
-    const sdone=s.items.filter((_,ii)=>checkState[currentDay+'_'+si+'_'+ii]).length;
-    const items=s.items.map((item,ii)=>`<div class="check-item ${checkState[currentDay+'_'+si+'_'+ii]?'done':''} ${flagState[currentDay+'_'+si+'_'+ii]?'flagged':''}">
-      <div class="chkbox" onclick="toggleChk('${currentDay}',${si},${ii})">${checkState[currentDay+'_'+si+'_'+ii]?'✓':''}</div>
+    const sdone=s.items.filter((_,ii)=>checkState[currentDay+'_'+destId+'_'+si+'_'+ii]).length;
+    const items=s.items.map((item,ii)=>`<div class="check-item ${checkState[currentDay+'_'+destId+'_'+si+'_'+ii]?'done':''} ${flagState[currentDay+'_'+destId+'_'+si+'_'+ii]?'flagged':''}">
+      <div class="chkbox" onclick="toggleChk('${currentDay}',${si},${ii})">${checkState[currentDay+'_'+destId+'_'+si+'_'+ii]?'✓':''}</div>
       <div style="flex:1"><div class="ci-text">${item.text}</div>${item.time?`<span class="ci-time">${item.time}</span>`:''}</div>
       <button class="flag-btn" onclick="toggleFlg('${currentDay}',${si},${ii})">🚩</button>
     </div>`).join('');
@@ -1091,15 +1093,54 @@ function pgChecklist(){
       <span class="cbadge">${sdone}/${s.items.length}</span><span class="chev">▼</span>
     </div><div class="cb">${items}</div></div>`;
   }).join('');
-  return `<div class="ph"><h1 data-i18n="title_checklist">✅ Daily Checklist</h1><p>${label}</p></div>
+  return `<div class="ph"><h1 data-i18n="title_checklist">✅ Daily Checklist</h1><p>${label}${d?' · '+d.flag+' '+d.name:''}</p></div>
   <div class="day-nav">${dayNav}</div>
   <div class="prog-wrap"><span class="prog-lbl">${currentDay}</span>
     <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
     <span class="prog-pct">${pct}%</span></div>
   ${sections}`;
 }
-function toggleChk(day,si,ii){const k=day+'_'+si+'_'+ii;checkState[k]=!checkState[k];renderMain();}
-function toggleFlg(day,si,ii){const k=day+'_'+si+'_'+ii;flagState[k]=!flagState[k];showToast(flagState[k]?'🚩 Flagged':'Flag removed');renderMain();}
+// Loads this specific cohort's saved checklist state for the current day
+// from Supabase, so it's no longer shared with every other cohort and no
+// longer wiped out on refresh.
+async function loadChecklistProgress(destId,day){
+  try{
+    const rows=await supaFetch(`checklist_progress?select=*&destination_id=eq.${destId}&day=eq.${encodeURIComponent(day)}`);
+    const row=rows&&rows[0];
+    const cs=row?.check_state||{}, fs=row?.flag_state||{};
+    Object.keys(cs).forEach(k=>{ checkState[day+'_'+destId+'_'+k]=cs[k]; });
+    Object.keys(fs).forEach(k=>{ flagState[day+'_'+destId+'_'+k]=fs[k]; });
+  }catch(e){ /* table may not exist yet — keep whatever's already in memory this session */ }
+  if(currentSection==='checklist') renderMain();
+}
+async function persistChecklistProgress(destId,day){
+  const prefix=day+'_'+destId+'_';
+  const cs={}, fs={};
+  Object.keys(checkState).forEach(k=>{ if(k.startsWith(prefix)) cs[k.slice(prefix.length)]=checkState[k]; });
+  Object.keys(flagState).forEach(k=>{ if(k.startsWith(prefix)) fs[k.slice(prefix.length)]=flagState[k]; });
+  try{
+    await fetch(SUPA_URL+'/rest/v1/checklist_progress',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({destination_id:destId,day,check_state:cs,flag_state:fs,updated_at:new Date().toISOString()})
+    });
+  }catch(e){ showToast('⚠️ Checklist change shown but failed to save: '+e.message); }
+}
+function toggleChk(day,si,ii){
+  const d=myDest(); const destId=d?d.id:'none';
+  const k=day+'_'+destId+'_'+si+'_'+ii;
+  checkState[k]=!checkState[k];
+  renderMain();
+  if(d) persistChecklistProgress(destId,day);
+}
+function toggleFlg(day,si,ii){
+  const d=myDest(); const destId=d?d.id:'none';
+  const k=day+'_'+destId+'_'+si+'_'+ii;
+  flagState[k]=!flagState[k];
+  showToast(flagState[k]?'🚩 Flagged':'Flag removed');
+  renderMain();
+  if(d) persistChecklistProgress(destId,day);
+}
 function setDay(d){currentDay=d;renderMain();}
 
 function pgFeedback(){
