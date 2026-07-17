@@ -771,6 +771,18 @@ function renderMain(){
 function myDest(){return DB.destinations.find(d=>d.id===currentUser.destId);}
 function myStudents(){return USERS.filter(u=>u.role==='student'&&u.destId===currentUser.destId);}
 function destStudents(did){return USERS.filter(u=>u.role==='student'&&u.destId===did);}
+// Which destinations the current user is allowed to see across the "Overview /
+// All Teams / Flights / Visa Overview / Supervisor Reports" style pages.
+// Supervisors and PMO staff who were assigned a specific destination only see
+// that one; a PM left unassigned (destId 0, e.g. the built-in demo PM
+// accounts) keeps the org-wide view across every destination.
+function visibleDestinations(){
+  if((currentUser.role==='pm'||currentUser.role==='supervisor')&&currentUser.destId){
+    const d=DB.destinations.find(x=>x.id===currentUser.destId);
+    return d?[d]:DB.destinations;
+  }
+  return DB.destinations;
+}
 let realDestCounts=null; // {destId: count} from live Supabase students table
 async function loadRealDestCounts(){
   try{
@@ -1322,18 +1334,19 @@ async function submitRpt(){
 // PM PAGES
 // ═══════════════════════════════════════════════════
 function pgOverview(){
-  const total=DB.destinations.reduce((a,d)=>a+destStudents(d.id).length,0);
-  const conf=DB.destinations.filter(d=>d.flightStatus==='Confirmed').length;
-  const vok=DB.destinations.filter(d=>d.visaStatus==='Approved').length;
+  const dests=visibleDestinations();
+  const total=dests.reduce((a,d)=>a+destStudents(d.id).length,0);
+  const conf=dests.filter(d=>d.flightStatus==='Confirmed').length;
+  const vok=dests.filter(d=>d.visaStatus==='Approved').length;
   return `<div class="ph"><h1 data-i18n="title_overview">🌐 Project Overview</h1></div>
   <div class="stat-grid">
     <div class="sc"><div class="lbl">Total students</div><div class="val">${total}</div></div>
-    <div class="sc"><div class="lbl">Destinations</div><div class="val">10</div></div>
-    <div class="sc"><div class="lbl">Flights confirmed</div><div class="val">${conf}/10</div></div>
-    <div class="sc"><div class="lbl">Visas approved</div><div class="val">${vok}/10</div></div>
+    <div class="sc"><div class="lbl">Destinations</div><div class="val">${dests.length}</div></div>
+    <div class="sc"><div class="lbl">Flights confirmed</div><div class="val">${conf}/${dests.length}</div></div>
+    <div class="sc"><div class="lbl">Visas approved</div><div class="val">${vok}/${dests.length}</div></div>
   </div>
   <div class="card"><div class="ch" style="cursor:default"><span>📊</span><span class="ct">All destinations</span></div>
-  <div class="cb">${DB.destinations.map(d=>{const sup=USERS.find(u=>u.role==='supervisor'&&u.destId===d.id);
+  <div class="cb">${dests.map(d=>{const sup=USERS.find(u=>u.role==='supervisor'&&u.destId===d.id);
     return `<div class="mr"><div style="font-size:1.3rem">${d.flag}</div>
     <div style="flex:1"><div class="mn">${d.name}</div><div class="msub">${sup?sup.name:'—'} · ${destStudents(d.id).length} students</div></div>
     <span class="badge ${d.flightStatus==='Confirmed'?'b-green':d.flightStatus==='Delayed'?'b-red':'b-amber'}" style="margin-right:4px">${d.flightStatus}</span>
@@ -1342,18 +1355,20 @@ function pgOverview(){
 }
 
 function pgTeams(){
+  const dests=visibleDestinations();
   return `<div class="ph"><h1 data-i18n="title_teams">👥 All Teams</h1></div>
   <div class="card"><div class="ch" style="cursor:default"><span>👥</span><span class="ct">Supervisors & groups</span></div>
   <div class="cb" style="padding:0"><table class="tbl"><thead><tr><th>Destination</th><th>Supervisor</th><th>Students</th><th>Status</th></tr></thead><tbody>
-  ${DB.destinations.map(d=>{const sup=USERS.find(u=>u.role==='supervisor'&&u.destId===d.id);return `<tr><td>${d.flag} ${d.name}</td><td>${sup?sup.name:'—'}</td><td>${destStudents(d.id).length}</td><td><span class="badge b-green">Active</span></td></tr>`;}).join('')}
+  ${dests.map(d=>{const sup=USERS.find(u=>u.role==='supervisor'&&u.destId===d.id);return `<tr><td>${d.flag} ${d.name}</td><td>${sup?sup.name:'—'}</td><td>${destStudents(d.id).length}</td><td><span class="badge b-green">Active</span></td></tr>`;}).join('')}
   </tbody></table></div></div>`;
 }
 
 function pgFlights(){
+  const dests=visibleDestinations();
   return `<div class="ph"><h1 data-i18n="title_flights">✈️ Flight Status</h1></div>
   <div class="card"><div class="ch" style="cursor:default"><span>✈️</span><span class="ct">All group flights</span></div>
   <div class="cb" style="padding:0;overflow-x:auto"><table class="tbl"><thead><tr><th>Destination</th><th>Flight</th><th>Departure</th><th>Arrival</th><th>Status</th></tr></thead><tbody>
-  ${DB.destinations.map(d=>`<tr><td>${d.flag} ${d.name}</td><td>${d.flightNo}</td>
+  ${dests.map(d=>`<tr><td>${d.flag} ${d.name}</td><td>${d.flightNo}</td>
     <td>${d.departureAirport} → ${d.departure}</td><td>${d.arrivalAirport} → ${d.arrival}</td>
     <td><select class="sel-status" onchange="updFlight(${d.id},this.value)">
       <option ${d.flightStatus==='Confirmed'?'selected':''}>Confirmed</option>
@@ -1366,7 +1381,9 @@ function pgFlights(){
 function updFlight(id,val){const d=DB.destinations.find(x=>x.id===id);if(d){d.flightStatus=val;showToast(d.name+' flight → '+val);}}
 
 function pgVisasAll(){
-  const dCards=DB.destinations.map(d=>`<div class="dest-card ${selectedDest===d.id?'sel':''}" onclick="selectedDest=${d.id};renderMain()">
+  const dests=visibleDestinations();
+  if(!dests.some(x=>x.id===selectedDest)) selectedDest=dests[0]?dests[0].id:selectedDest;
+  const dCards=dests.map(d=>`<div class="dest-card ${selectedDest===d.id?'sel':''}" onclick="selectedDest=${d.id};renderMain()">
     <div style="font-size:1.5rem">${d.flag}</div><div style="font-size:0.87rem;font-weight:600;color:var(--green)">${d.name}</div>
     <div style="font-size:0.67rem;color:var(--slate);margin-top:3px">${destStudents(d.id).length} students</div>
   </div>`).join('');
@@ -1384,9 +1401,10 @@ function pgVisasAll(){
 }
 
 function pgSupervisors(){
+  const dests=visibleDestinations();
   return `<div class="ph"><h1 data-i18n="title_supervisorsreports">📊 Supervisor Reports</h1></div>
   <div class="card"><div class="ch" style="cursor:default"><span>📋</span><span class="ct">Daily reports</span></div>
-  <div class="cb">${DB.destinations.map(d=>{const sup=USERS.find(u=>u.role==='supervisor'&&u.destId===d.id);
+  <div class="cb">${dests.map(d=>{const sup=USERS.find(u=>u.role==='supervisor'&&u.destId===d.id);
     return `<div class="mr"><div style="font-size:1.3rem">${d.flag}</div>
     <div style="flex:1"><div class="mn">${sup?sup.name:'—'}</div><div class="msub">${d.name} · ${destStudents(d.id).length} students</div></div>
     <div style="display:flex;gap:5px"><span class="badge b-green">Submitted</span>
@@ -1650,7 +1668,7 @@ function handleMemberCSVUpload(input){
 }
 async function saveBulkMembers(){
   const roleMap={'supervisor':'supervisor','team lead':'supervisor','calista pmo':'pm','pmo':'pm','pm':'pm','super admin':'admin','admin':'admin'};
-  let success=0,fail=0; const errors=[];
+  let success=0,fail=0; const errors=[]; const successByRole={};
   const btn=document.getElementById('mem-bulk-submit-btn');
   if(btn){btn.textContent='Uploading...';btn.disabled=true;}
   const progEl=document.getElementById('mem-bulk-progress');
@@ -1674,14 +1692,27 @@ async function saveBulkMembers(){
       const rows=await supaFetch('members','POST',{name:r.name,role,team_lead:r.teamLead,destination_id:destId,username:uname,password:pass,uid,initials:init});
       const newId=rows&&rows[0]?'mem_'+rows[0].id:'usr'+Date.now()+i;
       USERS.push({id:newId,name:r.name,role,destId:destId||0,username:uname,password:pass,initials:init,uid,teamLead:r.teamLead});
-      success++;
-    }catch(e){ fail++; errors.push(`Row ${i+1} (${r.name}): ${e.message}`); }
+      success++; successByRole[role]=(successByRole[role]||0)+1;
+    }catch(e){ fail++; errors.push(`Row ${i+1} (${r.name}) [${role}]: ${e.message}`); }
   }
   const barEl=document.getElementById('mem-bulk-bar'); if(barEl) barEl.style.width='100%';
   const statusEl=document.getElementById('mem-bulk-status'); if(statusEl) statusEl.textContent=`Done! ✅ ${success} added, ❌ ${fail} failed.`;
   const errEl=document.getElementById('mem-bulk-err');
   if(errEl) errEl.textContent=errors.length?errors.join(' | '):'';
   showToast(`✅ Bulk upload: ${success} added${fail?`, ${fail} failed`:''}`);
+  // Verify what actually persisted, per role, straight from the database —
+  // catches a silent DB-side rejection (e.g. a constraint on one role) that
+  // the insert call didn't throw an error for but also didn't really save.
+  for(const role of Object.keys(successByRole)){
+    try{
+      const dbRows=await supaFetch(`members?select=id&role=eq.${role}`);
+      const dbCount=(dbRows||[]).length;
+      const label={supervisor:'Supervisor',pm:'Calista PMO',admin:'Super Admin'}[role]||role;
+      if(dbCount<successByRole[role]){
+        showToast(`⚠️ ${label}: only ${dbCount} of the ${successByRole[role]} just-added rows are actually in the database — check for a role constraint (see fix_migrations.sql)`);
+      }
+    }catch(e){ /* verification is best-effort, don't block on it */ }
+  }
   if(btn){btn.textContent='Upload All';btn.disabled=false;}
   if(success&&!fail){ setTimeout(()=>{closeModal();renderMain();},1500); } else { renderMain(); }
 }
