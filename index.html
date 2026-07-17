@@ -490,13 +490,55 @@ const ALL_DAYS=['Day 0','Day 1','Day 2','Day 3','Day 4','Day 5','Day 6','Day 7',
 // State
 let USERS=[...CREDS];
 let membersLoaded=false;
+
+// Always derive a 2-letter avatar from a name — used as a live fallback so a
+// missing/blank `initials` field (e.g. from an older DB row or a bulk-upload
+// row that never got one saved) never shows as "??" in the UI.
+function getInitials(u){
+  const stored=(u&&u.initials||'').trim();
+  if(stored) return stored.slice(0,2).toUpperCase();
+  const name=(u&&u.name||'').trim();
+  if(!name) return '??';
+  const parts=name.split(/\s+/).filter(Boolean);
+  const init=(parts[0]?.[0]||'')+(parts[parts.length-1]?.[0]||'');
+  return init?init.toUpperCase():'??';
+}
+
+// Quote-aware CSV line splitter — handles fields wrapped in "double quotes"
+// (so a name/destination containing a comma doesn't shift every column after
+// it) and escaped "" quotes inside a field. Plain split(',') breaks on any
+// such file, which is a common cause of bulk-upload rows landing with the
+// wrong data in the wrong columns.
+function parseCSVLine(line){
+  const out=[];let cur='';let inQuotes=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(inQuotes){
+      if(c==='"'){
+        if(line[i+1]==='"'){cur+='"';i++;}
+        else inQuotes=false;
+      } else cur+=c;
+    } else {
+      if(c==='"') inQuotes=true;
+      else if(c===','){out.push(cur);cur='';}
+      else cur+=c;
+    }
+  }
+  out.push(cur);
+  return out.map(s=>s.trim());
+}
+// Strips a UTF-8 BOM (common when a CSV is saved from Excel as "CSV UTF-8")
+// which otherwise ends up glued onto the first header name and breaks
+// header matching (e.g. "\uFEFFName" no longer equals "name").
+function stripBOM(text){ return text.charCodeAt(0)===0xFEFF?text.slice(1):text; }
+
 async function loadMembersFromSupabase(){
   try{
     const rows=await supaFetch('members?select=*&order=created_at.asc');
     (rows||[]).forEach(r=>{
       // skip if a member with this username is already present (avoids dupes on re-run)
       if(USERS.some(u=>u.username.toLowerCase()===r.username.toLowerCase())) return;
-      USERS.push({id:'mem_'+r.id,username:r.username,password:r.password,name:r.name,role:r.role,destId:r.destination_id||0,uid:r.uid,teamLead:!!r.team_lead,initials:r.initials||(r.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase())});
+      USERS.push({id:'mem_'+r.id,username:r.username,password:r.password,name:r.name,role:r.role,destId:r.destination_id||0,uid:r.uid,teamLead:!!r.team_lead,initials:r.initials||''});
     });
   }catch(e){ /* Supabase members table may not exist yet — fails silently, demo accounts still work */ }
   membersLoaded=true;
@@ -856,7 +898,7 @@ function pgProfile(){
   <div class="card"><div class="ch" style="cursor:default"><span>📋</span><span class="ct">My details</span></div>
   <div class="cb" style="padding:15px">
     <div style="display:flex;align-items:center;gap:13px;margin-bottom:15px">
-      <div class="mav" style="width:48px;height:48px;font-size:0.92rem">${currentUser.initials||'??'}</div>
+      <div class="mav" style="width:48px;height:48px;font-size:0.92rem">${getInitials(currentUser)}</div>
       <div><div style="font-size:0.98rem;font-weight:600">${currentUser.name}</div>
       <div style="font-size:0.74rem;color:var(--slate)">${d?d.flag+' '+d.name+' — '+d.program:''}</div></div>
     </div>
@@ -882,7 +924,7 @@ function pgTeam(){
   </div>
   <div class="card"><div class="ch" style="cursor:default"><span>👥</span><span class="ct">All students</span></div>
   <div class="cb">${students.map(s=>`<div class="mr">
-    <div class="mav">${s.initials||'??'}</div>
+    <div class="mav">${getInitials(s)}</div>
     <div style="flex:1"><div class="mn">${s.name} <span class="uid-badge">${s.uid}</span></div>
     <div class="msub">Room: ${roomNumbers[s.id]||'—'} · ${s.username}</div></div>
     <button class="btn btn-sm" onclick="openRoomModal('${s.id}')">🛏 Room</button>
@@ -951,7 +993,7 @@ function pgFeedback(){
     }).join('');
     return `<div style="padding:10px 15px;border-bottom:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <div class="mav">${s.initials||'??'}</div>
+        <div class="mav">${getInitials(s)}</div>
         <div><div class="mn">${s.name}</div><div class="msub">${s.uid}</div></div>
       </div><div>${tags}</div>
     </div>`;
@@ -1160,7 +1202,7 @@ function clearInc(){['inc-time','inc-uid','inc-desc','inc-action'].forEach(id=>{
 function pgVisaStatus(){
   const students=myStudents();
   const rows=students.map(s=>{const vd=visaData[s.id]||{status:'Not Started',comments:''};
-    return `<tr><td><div style="display:flex;align-items:center;gap:7px"><div class="mav" style="width:27px;height:27px;font-size:0.67rem">${s.initials||'??'}</div><div><div style="font-size:0.82rem;font-weight:500">${s.name}</div><span class="uid-badge">${s.uid}</span></div></div></td>
+    return `<tr><td><div style="display:flex;align-items:center;gap:7px"><div class="mav" style="width:27px;height:27px;font-size:0.67rem">${getInitials(s)}</div><div><div style="font-size:0.82rem;font-weight:500">${s.name}</div><span class="uid-badge">${s.uid}</span></div></div></td>
     <td><select class="visa-sel" onchange="updVisa('${s.id}',this.value)">${VISA_STATUSES.map(vs=>`<option ${(vd.status||'Not Started')===vs?'selected':''}>${vs}</option>`).join('')}</select></td>
     <td><input style="width:170px;padding:4px 7px;border:1px solid var(--border);border-radius:5px;font-size:0.74rem;font-family:inherit" value="${vd.comments||''}" placeholder="Comment..." onchange="updVisaComment('${s.id}',this.value)"></td>
     <td><span class="badge ${vd.status==='Approved'?'b-green':vd.status==='Rejected'?'b-red':vd.status==='Not Started'?'b-gray':'b-amber'}">${vd.status||'Not Started'}</span></td></tr>`;
@@ -1458,7 +1500,7 @@ function pgMembers(){
     <tbody id="mem-tbody">${filtered.map(u=>{const d=u.destId?DB.destinations.find(x=>x.id===u.destId):null;
       return `<tr>
         <td><input type="checkbox" class="mem-row-cb" data-id="${u.id}" ${selectedMemberIds.has(u.id)?'checked':''} onchange="toggleMemberSelect('${u.id}',this.checked)"></td>
-        <td><div style="display:flex;align-items:center;gap:6px"><div class="mav" style="width:25px;height:25px;font-size:0.64rem">${u.initials||'??'}</div><span style="font-size:0.79rem">${u.name}</span></div></td>
+        <td><div style="display:flex;align-items:center;gap:6px"><div class="mav" style="width:25px;height:25px;font-size:0.64rem">${getInitials(u)}</div><span style="font-size:0.79rem">${u.name}</span></div></td>
         <td><span class="uid-badge">${u.uid||'—'}</span></td>
         <td style="font-size:0.74rem;font-family:monospace">${u.username}</td>
         <td style="font-size:0.74rem">${d?d.flag+' '+d.name:'—'}</td>
@@ -1547,12 +1589,12 @@ function handleMemberCSVUpload(input){
   const file=input.files[0]; if(!file) return;
   const reader=new FileReader();
   reader.onload=e=>{
-    const text=e.target.result;
+    const text=stripBOM(e.target.result);
     const lines=text.split(/\r?\n/).filter(l=>l.trim());
-    const headers=lines[0].split(',').map(h=>h.trim().toLowerCase());
+    const headers=parseCSVLine(lines[0]).map(h=>h.trim().toLowerCase());
     parsedMemberRows=[];
     for(let i=1;i<lines.length;i++){
-      const cols=lines[i].split(',').map(c=>c.trim().replace(/^"|"$/g,''));
+      const cols=parseCSVLine(lines[i]);
       parsedMemberRows.push({
         name:cols[headers.indexOf('name')]||'',
         role:(cols[headers.indexOf('role')]||'').toLowerCase(),
@@ -1574,7 +1616,7 @@ function handleMemberCSVUpload(input){
     document.getElementById('mem-csv-preview').innerHTML=preview;
     document.getElementById('mem-bulk-submit-btn').style.display='inline-flex';
   };
-  reader.readAsText(file);
+  reader.readAsText(file,'UTF-8');
 }
 async function saveBulkMembers(){
   const roleMap={'supervisor':'supervisor','team lead':'supervisor','calista pmo':'pm','pmo':'pm','pm':'pm','super admin':'admin','admin':'admin'};
@@ -1595,7 +1637,7 @@ async function saveBulkMembers(){
     const uname=r.username||r.name.toLowerCase().replace(/[^a-z]+/g,'.');
     if(USERS.some(u=>u.username.toLowerCase()===uname.toLowerCase())){ fail++; errors.push(`Row ${i+1} (${r.name}): username "${uname}" already exists`); continue; }
     const pass=r.password||'Temp@1234';
-    const parts=r.name.trim().split(/\s+/);const init=parts[0][0]+(parts[parts.length-1][0]||'');
+    const init=getInitials({name:r.name});
     const prefix={supervisor:'SUP',pm:'PMO',admin:'ADM'}[role];
     const uid=prefix+String(USERS.filter(u=>u.role===role).length+1+success).padStart(4,'0');
     try{
@@ -1635,7 +1677,7 @@ async function saveNewMember(){
   const teamLead=document.getElementById('am-teamlead')?.value==='true';
   const uname=v('am-uname')||name.toLowerCase().replace(/[^a-z]+/g,'.');
   const pass=v('am-pass')||'Temp@1234';
-  const parts=name.split(' ');const init=parts[0][0]+(parts[parts.length-1][0]||'');
+  const init=getInitials({name});
   const prefix={supervisor:'SUP',pm:'PMO',admin:'ADM'}[role];
   const uid=v('am-uid')||(prefix+String(USERS.filter(u=>u.role===role).length+1).padStart(4,'0'));
   if(USERS.some(u=>u.username.toLowerCase()===uname.toLowerCase())){ showToast('⚠️ Username already exists'); return; }
@@ -1669,7 +1711,7 @@ async function saveEditMember(id){
   u.destId=parseInt(v('em-dest'))||0;
   u.username=v('em-uname')||u.username; u.password=v('em-pass')||u.password;
   u.uid=v('em-uid')||u.uid;
-  const parts=u.name.split(' ');u.initials=parts[0][0]+(parts[parts.length-1][0]||'');
+  u.initials=getInitials({name:u.name});
   showToast('✅ '+u.name+' updated!');closeModal();renderMain();
   if(u.role!=='student'){
     try{
@@ -2525,13 +2567,13 @@ function previewCSV(input){
   document.getElementById('csv-filename').textContent=file.name;
   const reader=new FileReader();
   reader.onload=function(e){
-    const text=e.target.result;
-    const lines=text.trim().split(/\n/).filter(l=>l.trim());
+    const text=stripBOM(e.target.result).trim();
+    const lines=text.split(/\r?\n/).filter(l=>l.trim());
     if(lines.length<2){document.getElementById('bulk-err').textContent='CSV must have a header row and at least one student.';return;}
-    const headers=lines[0].split(',').map(h=>h.replace(/"/g,'').trim().toLowerCase());
+    const headers=parseCSVLine(lines[0]).map(h=>h.trim().toLowerCase());
     parsedCSVRows=[];
     for(let i=1;i<lines.length;i++){
-      const cols=lines[i].split(',').map(c=>c.replace(/"/g,'').trim());
+      const cols=parseCSVLine(lines[i]);
       parsedCSVRows.push({
         name:cols[headers.indexOf('name')]||'',
         destination:cols[headers.indexOf('destination')]||'',
@@ -2555,7 +2597,7 @@ function previewCSV(input){
     document.getElementById('bulk-save-btn').textContent=`Upload ${parsedCSVRows.length} Students`;
     document.getElementById('bulk-err').textContent='';
   };
-  reader.readAsText(file);
+  reader.readAsText(file,'UTF-8');
 }
 
 async function saveBulkStudents(){
