@@ -1528,6 +1528,11 @@ function openBulkUploadMembersModal(){
     <button class="btn btn-sm" onclick="downloadMemberCSVTemplate()" style="margin-bottom:12px">⬇ Download CSV Template</button>
     <input type="file" id="mem-csv-file" accept=".csv" onchange="handleMemberCSVUpload(this)" style="margin-bottom:12px;font-size:0.8rem">
     <div id="mem-csv-preview"></div>
+    <div id="mem-bulk-progress" style="display:none;margin-top:10px">
+      <div class="bar-track"><div class="bar-fill" id="mem-bulk-bar" style="width:0%"></div></div>
+      <div id="mem-bulk-status" style="font-size:0.78rem;color:var(--slate);margin-top:6px;text-align:center"></div>
+    </div>
+    <div id="mem-bulk-err" style="color:var(--red);font-size:0.76rem;margin-top:8px;max-height:150px;overflow-y:auto"></div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">Cancel</button>
     <button class="btn btn-primary" id="mem-bulk-submit-btn" onclick="saveBulkMembers()" style="display:none">Upload All</button></div>`);
 }
@@ -1562,7 +1567,7 @@ function handleMemberCSVUpload(input){
       ${parsedMemberRows.slice(0,8).map((r,i)=>{
         const role=roleMap[r.role]||'';
         const destId=r.destination?resolveDestId(r.destination):null;
-        return `<tr><td>${i+1}</td><td>${r.name}</td><td>${role?role:`<span style="color:var(--red)">⚠️ unknown role "${r.role}"</span>`}</td><td>${r.teamLead?'👑 Yes':'No'}</td><td>${role==='supervisor'?(destId?destNameById(destId):`<span style="color:var(--red)">⚠️ no match</span>`):'—'}</td><td>${r.username}</td></tr>`;
+        return `<tr><td>${i+1}</td><td>${r.name}</td><td>${role?role:`<span style="color:var(--red)">⚠️ unknown role "${r.role}"</span>`}</td><td>${r.teamLead?'👑 Yes':'No'}</td><td>${r.destination?(destId?destNameById(destId):`<span style="color:var(--red)">⚠️ no match</span>`):'—'}</td><td>${r.username}</td></tr>`;
       }).join('')}
       ${parsedMemberRows.length>8?`<tr><td colspan="6" style="text-align:center;color:var(--slate)">...and ${parsedMemberRows.length-8} more</td></tr>`:''}
     </tbody></table>`;
@@ -1576,15 +1581,21 @@ async function saveBulkMembers(){
   let success=0,fail=0; const errors=[];
   const btn=document.getElementById('mem-bulk-submit-btn');
   if(btn){btn.textContent='Uploading...';btn.disabled=true;}
+  const progEl=document.getElementById('mem-bulk-progress');
+  if(progEl) progEl.style.display='block';
   for(let i=0;i<parsedMemberRows.length;i++){
     const r=parsedMemberRows[i];
+    const pct=Math.round((i/parsedMemberRows.length)*100);
+    const barEl=document.getElementById('mem-bulk-bar'); if(barEl) barEl.style.width=pct+'%';
+    const statusEl=document.getElementById('mem-bulk-status'); if(statusEl) statusEl.textContent=`Processing ${i+1} of ${parsedMemberRows.length}...`;
     const role=roleMap[r.role];
-    if(!r.name||!role){ fail++; errors.push(`Row ${i+1}: missing name or unrecognized role`); continue; }
-    const destId=role==='supervisor'&&r.destination?resolveDestId(r.destination):null;
+    if(!r.name||!role){ fail++; errors.push(`Row ${i+1}: missing name or unrecognized role "${r.role}"`); continue; }
+    const destId=r.destination?resolveDestId(r.destination):null;
+    if(r.destination&&!destId){ fail++; errors.push(`Row ${i+1} (${r.name}): destination "${r.destination}" doesn't match any cohort`); continue; }
     const uname=r.username||r.name.toLowerCase().replace(/[^a-z]+/g,'.');
     if(USERS.some(u=>u.username.toLowerCase()===uname.toLowerCase())){ fail++; errors.push(`Row ${i+1} (${r.name}): username "${uname}" already exists`); continue; }
     const pass=r.password||'Temp@1234';
-    const parts=r.name.split(' ');const init=parts[0][0]+(parts[parts.length-1][0]||'');
+    const parts=r.name.trim().split(/\s+/);const init=parts[0][0]+(parts[parts.length-1][0]||'');
     const prefix={supervisor:'SUP',pm:'PMO',admin:'ADM'}[role];
     const uid=prefix+String(USERS.filter(u=>u.role===role).length+1+success).padStart(4,'0');
     try{
@@ -1594,9 +1605,13 @@ async function saveBulkMembers(){
       success++;
     }catch(e){ fail++; errors.push(`Row ${i+1} (${r.name}): ${e.message}`); }
   }
+  const barEl=document.getElementById('mem-bulk-bar'); if(barEl) barEl.style.width='100%';
+  const statusEl=document.getElementById('mem-bulk-status'); if(statusEl) statusEl.textContent=`Done! ✅ ${success} added, ❌ ${fail} failed.`;
+  const errEl=document.getElementById('mem-bulk-err');
+  if(errEl) errEl.textContent=errors.length?errors.join(' | '):'';
   showToast(`✅ Bulk upload: ${success} added${fail?`, ${fail} failed`:''}`);
-  if(errors.length) console.warn('Bulk member upload issues:',errors);
-  closeModal();renderMain();
+  if(btn){btn.textContent='Upload All';btn.disabled=false;}
+  if(success&&!fail){ setTimeout(()=>{closeModal();renderMain();},1500); } else { renderMain(); }
 }
 
 function openAddMemberModal(){
