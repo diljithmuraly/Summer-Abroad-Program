@@ -2381,14 +2381,14 @@ function pgReports(){
   <div class="card"><div class="ch" style="cursor:default"><span>📋</span><span class="ct">Submitted Reports</span><span class="cbadge" id="rpt-count-badge">Loading...</span></div>
   <div class="cb" style="padding:0;overflow-x:auto">
     <table class="sch-tbl" style="min-width:800px">
-      <thead><tr><th>Supervisor</th><th>Destination</th><th>Day</th><th>Students</th><th>Incidents</th><th>Submitted</th><th></th></tr></thead>
+      <thead><tr><th>Supervisor</th><th>Destination</th><th>Day</th><th>Students</th><th>Report Notes (incidents)</th><th>Submitted</th><th></th></tr></thead>
       <tbody id="rpt-tbody"><tr><td colspan="7" style="text-align:center;padding:20px;color:var(--slate)">Loading reports...</td></tr></tbody>
     </table>
   </div></div>
   <div class="stat-grid">
     <div class="sc"><div class="lbl">Reports today</div><div class="val" id="rpt-stat-today">—</div></div>
     <div class="sc"><div class="lbl">Total reports</div><div class="val" id="rpt-stat-total">—</div></div>
-    <div class="sc"><div class="lbl">Incidents</div><div class="val" id="rpt-stat-incidents">—</div><div class="sub">reported</div></div>
+    <div class="sc"><div class="lbl">Reports flagging incidents</div><div class="val" id="rpt-stat-incidents">—</div><div class="sub">see Incident Log for details</div></div>
   </div>
   <div class="card"><div class="ch" style="cursor:default"><span>⬇️</span><span class="ct">Download reports</span></div>
   <div class="cb">${DB.destinations.map(d=>{const sup=USERS.find(u=>u.role==='supervisor'&&u.destId===d.id);return `<div class="mr"><div style="font-size:1.2rem">${d.flag}</div>
