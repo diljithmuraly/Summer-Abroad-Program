@@ -1420,13 +1420,24 @@ function pgMembers(){
   if(!window._mf)window._mf='all';
   if(window._mfd===undefined)window._mfd=0;
   if(window._msearch===undefined)window._msearch='';
+  if(window._msort===undefined)window._msort=null;
+  if(window._msortDir===undefined)window._msortDir=1;
   const pillLabels={all:'All',supervisor:'Supervisor',pm:'Calista PMO',admin:'Super Admin'};
   const pills=['all','supervisor','pm','admin'].map(r=>`<button class="spill ${window._mf===r?'active':''}" onclick="window._mf='${r}';renderMain()">${pillLabels[r]}</button>`).join('');
   const destOpts='<option value="0">All destinations</option>'+DB.destinations.map(d=>`<option value="${d.id}" ${window._mfd===d.id?'selected':''}>${d.flag} ${d.name}</option>`).join('');
   let filtered=USERS.filter(u=>u.role!=='student').filter(u=>window._mf==='all'||u.role===window._mf);
   if(window._mfd>0)filtered=filtered.filter(u=>u.destId===window._mfd);
   if(window._msearch.length>1)filtered=filtered.filter(u=>u.name.toLowerCase().includes(window._msearch.toLowerCase())||u.username.toLowerCase().includes(window._msearch.toLowerCase())||(u.uid&&u.uid.toLowerCase().includes(window._msearch.toLowerCase())));
+  if(window._msort){
+    filtered=filtered.slice().sort((a,b)=>{
+      const dNameOf=u=>{const d=u.destId?DB.destinations.find(x=>x.id===u.destId):null;return d?d.name:'';};
+      const av=window._msort==='destination'?dNameOf(a):window._msort==='role'?a.role:(a[window._msort]||'');
+      const bv=window._msort==='destination'?dNameOf(b):window._msort==='role'?b.role:(b[window._msort]||'');
+      return String(av).toLowerCase().localeCompare(String(bv).toLowerCase())*window._msortDir;
+    });
+  }
   window._lastRenderedMemberIds=filtered.map(u=>u.id);
+  const sortTh=(field,label,width)=>`<th style="width:${width};cursor:pointer;user-select:none" onclick="sortMembers('${field}')">${label} <span style="font-size:0.7em;color:var(--slate)">${window._msort===field?(window._msortDir===1?'▲':'▼'):''}</span></th>`;
   return `<div class="ph"><h1 data-i18n="title_membersall">👥 Members</h1><p data-i18n="sub_membersall">Supervisors, Team Leaders & Calista PMO — for students, use the Students page</p></div>
   <div style="display:flex;gap:7px;margin-bottom:11px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-primary" onclick="openAddMemberModal()">+ Add Member</button>
@@ -1443,7 +1454,7 @@ function pgMembers(){
   <div class="section-pills">${pills}</div>
   <div class="card"><div class="ch" style="cursor:default"><span>👥</span><span class="ct">Members (${filtered.length})</span></div>
   <div class="cb" style="padding:0;overflow-x:auto"><table class="tbl" style="table-layout:fixed;width:100%;min-width:800px">
-    <thead><tr><th style="width:26px"><input type="checkbox" id="mem-select-all" onchange="toggleAllMembers(this.checked)"></th><th style="width:22%">Name</th><th style="width:12%">UID</th><th style="width:12%">Username</th><th style="width:15%">Destination</th><th style="width:9%">Role</th><th style="width:9%">Password</th><th style="width:15%">Actions</th></tr></thead>
+    <thead><tr><th style="width:26px"><input type="checkbox" id="mem-select-all" onchange="toggleAllMembers(this.checked)"></th>${sortTh('name','Name','22%')}${sortTh('uid','UID','12%')}${sortTh('username','Username','12%')}${sortTh('destination','Destination','15%')}${sortTh('role','Role','9%')}<th style="width:9%">Password</th><th style="width:15%">Actions</th></tr></thead>
     <tbody id="mem-tbody">${filtered.map(u=>{const d=u.destId?DB.destinations.find(x=>x.id===u.destId):null;
       return `<tr>
         <td><input type="checkbox" class="mem-row-cb" data-id="${u.id}" ${selectedMemberIds.has(u.id)?'checked':''} onchange="toggleMemberSelect('${u.id}',this.checked)"></td>
@@ -1459,6 +1470,10 @@ function pgMembers(){
         </div></td>
       </tr>`;}).join('')}
     </tbody></table></div></div>`;
+}
+function sortMembers(field){
+  if(window._msort===field) window._msortDir*=-1; else { window._msort=field; window._msortDir=1; }
+  renderMain();
 }
 function toggleAllMembers(checked){
   const ids=window._lastRenderedMemberIds||[];
@@ -2213,6 +2228,7 @@ let selectedStudentIds=new Set();
 function pgStudents(){
   loadStudents();
   const destOpts=DB.destinations.map(d=>`<option value="${d.id}">${d.flag} ${d.name}</option>`).join('');
+  const sortTh=(field,label)=>`<th style="cursor:pointer;user-select:none" onclick="sortStudents('${field}')">${label} <span class="sort-ind" data-field="${field}" style="font-size:0.7em;color:var(--slate)">${stuSortField===field?(stuSortDir===1?'▲':'▼'):''}</span></th>`;
   return `<div class="ph"><h1 data-i18n="title_studentsall">🎓 Students</h1><p>Manage student records, documents & flights — country-wise</p></div>
   <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
     <button class="btn btn-primary" onclick="openAddStudentModal()">+ Add Student</button>
@@ -2225,22 +2241,33 @@ function pgStudents(){
   <div class="card"><div class="ch" style="cursor:default"><span>👥</span><span class="ct">All Students</span><span class="cbadge" id="stu-count">Loading...</span></div>
   <div class="cb" style="padding:0;overflow-x:auto">
     <table class="sch-tbl" style="min-width:820px">
-      <thead><tr><th style="width:30px"><input type="checkbox" id="stu-select-all" onchange="toggleAllStudents(this.checked)"></th><th>Name</th><th>Cohort</th><th>Passport No.</th><th>Emirates ID</th><th>Phone</th><th>Email</th><th>School</th><th>Docs</th><th></th></tr></thead>
-      <tbody id="stu-tbody"><tr><td colspan="10" style="text-align:center;padding:20px;color:var(--slate)">Loading students...</td></tr></tbody>
+      <thead><tr><th style="width:30px"><input type="checkbox" id="stu-select-all" onchange="toggleAllStudents(this.checked)"></th><th style="width:40px">#</th>${sortTh('name','Name')}${sortTh('cohort','Cohort')}${sortTh('passport_number','Passport No.')}${sortTh('emirates_id','Emirates ID')}${sortTh('phone','Phone')}${sortTh('email','Email')}${sortTh('school_name','School')}<th>Docs</th><th></th></tr></thead>
+      <tbody id="stu-tbody"><tr><td colspan="11" style="text-align:center;padding:20px;color:var(--slate)">Loading students...</td></tr></tbody>
     </table>
   </div></div>`;
 }
 function destNameById(id){const d=DB.destinations.find(x=>x.id===id);return d?`${d.flag} ${d.name}`:'—';}
 
+let stuCohortSerial=new Map();
+function computeCohortSerials(){
+  stuCohortSerial=new Map();
+  const byDest={};
+  studentsList.forEach(s=>{ (byDest[s.destination_id]=byDest[s.destination_id]||[]).push(s); });
+  Object.values(byDest).forEach(group=>{
+    group.slice().sort((a,b)=>new Date(a.created_at)-new Date(b.created_at))
+      .forEach((s,i)=>stuCohortSerial.set(s.id,i+1));
+  });
+}
 async function loadStudents(){
   try{
     studentsList = await supaFetch('students?select=*,documents(*),flights(*)&order=created_at.desc');
+    computeCohortSerials();
     renderStudentTable(studentsList);
     const el=document.getElementById('stu-count');
     if(el) el.textContent=studentsList.length+' students';
   } catch(e){
     const tb=document.getElementById('stu-tbody');
-    if(tb) tb.innerHTML=`<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--red)">Error loading: ${e.message}</td></tr>`;
+    if(tb) tb.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--red)">Error loading: ${e.message}</td></tr>`;
   }
 }
 function toggleAllStudents(checked){
@@ -2282,7 +2309,7 @@ function renderStudentTable(list){
   if(!tb) return;
   window._lastRenderedStudentList=list;
   window._lastRenderedStudentIds=list.map(s=>s.id);
-  if(!list.length){tb.innerHTML='<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--slate)">No students yet. Click + Add Student.</td></tr>';return;}
+  if(!list.length){tb.innerHTML='<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--slate)">No students yet. Click + Add Student.</td></tr>';return;}
   tb.innerHTML=list.map(s=>{
     const docs=s.documents&&s.documents[0]||{};
     const hasPassport=docs.passport_copy?'✅':'❌';
@@ -2290,13 +2317,14 @@ function renderStudentTable(list){
     const hasPhoto=docs.photograph?'✅':'❌';
     return `<tr>
       <td><input type="checkbox" class="stu-row-cb" data-id="${s.id}" ${selectedStudentIds.has(s.id)?'checked':''} onchange="toggleStudentSelect('${s.id}',this.checked)"></td>
+      <td style="font-size:0.78rem;color:var(--slate)">${stuCohortSerial.get(s.id)||'—'}</td>
       <td style="font-weight:600">${s.name}</td>
       <td style="font-size:0.78rem;white-space:nowrap">${destNameById(s.destination_id)}</td>
-      <td style="font-family:monospace;font-size:0.78rem">${s.passport_number}</td>
-      <td style="font-family:monospace;font-size:0.78rem">${s.emirates_id}</td>
-      <td>${s.phone}</td>
-      <td style="font-size:0.78rem">${s.email}</td>
-      <td>${s.school_name}</td>
+      <td style="font-family:monospace;font-size:0.78rem">${s.passport_number||'—'}</td>
+      <td style="font-family:monospace;font-size:0.78rem">${s.emirates_id||'—'}</td>
+      <td>${s.phone||'—'}</td>
+      <td style="font-size:0.78rem">${s.email||'—'}</td>
+      <td>${s.school_name||'—'}</td>
       <td style="font-size:0.78rem;white-space:nowrap">🛂${hasPassport} 🛂${hasVisa} 📷${hasPhoto}</td>
       <td><div style="display:flex;gap:4px">
         <button class="btn btn-sm" onclick="openViewStudentModal('${s.id}')">👁</button>
@@ -2308,18 +2336,31 @@ function renderStudentTable(list){
   updateBulkDeleteBtn();
 }
 
+let stuSortField=null,stuSortDir=1;
+function sortStudents(field){
+  if(stuSortField===field) stuSortDir*=-1; else { stuSortField=field; stuSortDir=1; }
+  document.querySelectorAll('.sort-ind').forEach(el=>{ el.textContent=el.getAttribute('data-field')===field?(stuSortDir===1?'▲':'▼'):''; });
+  filterStudents();
+}
 function filterStudents(){
   const q=document.getElementById('stu-search').value.toLowerCase();
   const destFilterEl=document.getElementById('stu-dest-filter');
   const destFilter=destFilterEl?destFilterEl.value:'';
-  const filtered=studentsList.filter(s=>{
-    const matchesQ=!q||s.name.toLowerCase().includes(q)||
-      s.passport_number.toLowerCase().includes(q)||
-      s.emirates_id.toLowerCase().includes(q)||
-      s.school_name.toLowerCase().includes(q);
+  let filtered=studentsList.filter(s=>{
+    const matchesQ=!q||(s.name||'').toLowerCase().includes(q)||
+      (s.passport_number||'').toLowerCase().includes(q)||
+      (s.emirates_id||'').toLowerCase().includes(q)||
+      (s.school_name||'').toLowerCase().includes(q);
     const matchesDest=!destFilter||String(s.destination_id)===destFilter;
     return matchesQ&&matchesDest;
   });
+  if(stuSortField){
+    filtered=filtered.slice().sort((a,b)=>{
+      const av=stuSortField==='cohort'?destNameById(a.destination_id):(a[stuSortField]||'');
+      const bv=stuSortField==='cohort'?destNameById(b.destination_id):(b[stuSortField]||'');
+      return String(av).toLowerCase().localeCompare(String(bv).toLowerCase())*stuSortDir;
+    });
+  }
   renderStudentTable(filtered);
 }
 
@@ -2558,15 +2599,15 @@ function openEditStudentModal(id){
       <div class="fg-n"><label>Destination / Cohort *</label><select id="es-dest">${destOpts}</select></div>
     </div>
     <div class="form-row">
-      <div class="fg-n"><label>Passport Number *</label><input id="es-passport" value="${s.passport_number}"></div>
-      <div class="fg-n"><label>Emirates ID *</label><input id="es-eid" value="${s.emirates_id}"></div>
+      <div class="fg-n"><label>Passport Number</label><input id="es-passport" value="${s.passport_number||''}"></div>
+      <div class="fg-n"><label>Emirates ID</label><input id="es-eid" value="${s.emirates_id||''}"></div>
     </div>
     <div class="form-row">
-      <div class="fg-n"><label>Phone *</label><input id="es-phone" value="${s.phone}"></div>
-      <div class="fg-n"><label>Email *</label><input id="es-email" value="${s.email}"></div>
+      <div class="fg-n"><label>Phone</label><input id="es-phone" value="${s.phone||''}"></div>
+      <div class="fg-n"><label>Email</label><input id="es-email" value="${s.email||''}"></div>
     </div>
     <div class="form-row">
-      <div class="fg-n"><label>School *</label><input id="es-school" value="${s.school_name}"></div>
+      <div class="fg-n"><label>School</label><input id="es-school" value="${s.school_name||''}"></div>
     </div>
     <div class="login-error" id="es-err" style="display:none"></div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">Cancel</button>
@@ -2574,7 +2615,7 @@ function openEditStudentModal(id){
 }
 async function saveEditStudent(id){
   const name=v('es-name'),destId=v('es-dest'),passport=v('es-passport'),eid=v('es-eid'),phone=v('es-phone'),email=v('es-email'),school=v('es-school');
-  if(!name||!destId||!passport||!eid||!phone||!email||!school){
+  if(!name||!destId){
     const errEl=document.getElementById('es-err');
     if(errEl){errEl.textContent='⚠️ Please fill all required fields';errEl.style.display='block';}
     return;
@@ -2583,7 +2624,7 @@ async function saveEditStudent(id){
   if(btn){btn.textContent='Saving...';btn.disabled=true;}
   try{
     const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'return=representation'};
-    const res=await fetch(SUPA_URL+'/rest/v1/students?id=eq.'+id,{method:'PATCH',headers,body:JSON.stringify({name,destination_id:parseInt(destId),passport_number:passport,emirates_id:eid,phone,email,school_name:school})});
+    const res=await fetch(SUPA_URL+'/rest/v1/students?id=eq.'+id,{method:'PATCH',headers,body:JSON.stringify({name,destination_id:parseInt(destId),passport_number:passport||null,emirates_id:eid||null,phone:phone||null,email:email||null,school_name:school||null})});
     if(!res.ok) throw new Error('Save failed ('+res.status+')');
     showToast('✅ '+name+' updated');
     closeModal();
@@ -2608,11 +2649,11 @@ function openViewStudentModal(id){
   openModal(`<h2>👤 ${s.name}</h2>
     <div class="info-grid" style="margin-bottom:12px">
       <div class="ii"><div class="il">Cohort</div><div class="iv">${destNameById(s.destination_id)}</div></div>
-      <div class="ii"><div class="il">Passport</div><div class="iv" style="font-family:monospace">${s.passport_number}</div></div>
-      <div class="ii"><div class="il">Emirates ID</div><div class="iv" style="font-family:monospace">${s.emirates_id}</div></div>
-      <div class="ii"><div class="il">Phone</div><div class="iv">${s.phone}</div></div>
-      <div class="ii"><div class="il">Email</div><div class="iv">${s.email}</div></div>
-      <div class="ii"><div class="il">School</div><div class="iv">${s.school_name}</div></div>
+      <div class="ii"><div class="il">Passport</div><div class="iv" style="font-family:monospace">${s.passport_number||'—'}</div></div>
+      <div class="ii"><div class="il">Emirates ID</div><div class="iv" style="font-family:monospace">${s.emirates_id||'—'}</div></div>
+      <div class="ii"><div class="il">Phone</div><div class="iv">${s.phone||'—'}</div></div>
+      <div class="ii"><div class="il">Email</div><div class="iv">${s.email||'—'}</div></div>
+      <div class="ii"><div class="il">School</div><div class="iv">${s.school_name||'—'}</div></div>
       <div class="ii"><div class="il">Added</div><div class="iv">${new Date(s.created_at).toLocaleDateString()}</div></div>
     </div>
     <div style="font-size:0.78rem;font-weight:600;color:var(--slate);margin-bottom:8px">📄 DOCUMENTS</div>
