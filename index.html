@@ -532,6 +532,23 @@ function parseCSVLine(line){
 // header matching (e.g. "\uFEFFName" no longer equals "name").
 function stripBOM(text){ return text.charCodeAt(0)===0xFEFF?text.slice(1):text; }
 
+// Reads a CSV file robustly. Excel's plain "CSV (Comma delimited)" export
+// saves as Windows-1252, not UTF-8 — decoding that as UTF-8 turns any
+// smart-quote/accented character into a broken "�". This tries strict UTF-8
+// first and only falls back to Windows-1252 if the bytes aren't valid UTF-8,
+// so both kinds of exported CSV read cleanly.
+function readCSVFileSmart(file, onLoaded){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const buf=e.target.result;
+    let text;
+    try{ text=new TextDecoder('utf-8',{fatal:true}).decode(buf); }
+    catch(err){ text=new TextDecoder('windows-1252').decode(buf); }
+    onLoaded(stripBOM(text));
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 async function loadMembersFromSupabase(){
   try{
     const rows=await supaFetch('members?select=*&order=created_at.asc');
@@ -1587,9 +1604,7 @@ Mohammed Al Rashid,Calista PMO,,,mohammed.pmo,Pmo@2026`;
 }
 function handleMemberCSVUpload(input){
   const file=input.files[0]; if(!file) return;
-  const reader=new FileReader();
-  reader.onload=e=>{
-    const text=stripBOM(e.target.result);
+  readCSVFileSmart(file, text=>{
     const lines=text.split(/\r?\n/).filter(l=>l.trim());
     const headers=parseCSVLine(lines[0]).map(h=>h.trim().toLowerCase());
     parsedMemberRows=[];
@@ -1615,8 +1630,7 @@ function handleMemberCSVUpload(input){
     </tbody></table>`;
     document.getElementById('mem-csv-preview').innerHTML=preview;
     document.getElementById('mem-bulk-submit-btn').style.display='inline-flex';
-  };
-  reader.readAsText(file,'UTF-8');
+  });
 }
 async function saveBulkMembers(){
   const roleMap={'supervisor':'supervisor','team lead':'supervisor','calista pmo':'pm','pmo':'pm','pm':'pm','super admin':'admin','admin':'admin'};
@@ -2565,9 +2579,8 @@ let parsedCSVRows=[];
 function previewCSV(input){
   const file=input.files[0];if(!file)return;
   document.getElementById('csv-filename').textContent=file.name;
-  const reader=new FileReader();
-  reader.onload=function(e){
-    const text=stripBOM(e.target.result).trim();
+  readCSVFileSmart(file, text=>{
+    text=text.trim();
     const lines=text.split(/\r?\n/).filter(l=>l.trim());
     if(lines.length<2){document.getElementById('bulk-err').textContent='CSV must have a header row and at least one student.';return;}
     const headers=parseCSVLine(lines[0]).map(h=>h.trim().toLowerCase());
@@ -2596,8 +2609,7 @@ function previewCSV(input){
     document.getElementById('bulk-save-btn').disabled=false;
     document.getElementById('bulk-save-btn').textContent=`Upload ${parsedCSVRows.length} Students`;
     document.getElementById('bulk-err').textContent='';
-  };
-  reader.readAsText(file,'UTF-8');
+  });
 }
 
 async function saveBulkStudents(){
