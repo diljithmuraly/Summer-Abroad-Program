@@ -1404,14 +1404,14 @@ function pgReport(){
       <div class="rpt-field"><label>Health & wellbeing</label><textarea id="rpt-health" placeholder="Any health concerns, medications..."></textarea></div>
       <div class="rpt-field"><label>Incidents summary</label><textarea id="rpt-inc" placeholder="If none: 'No incidents reported'"></textarea></div>
       <div class="rpt-field"><label>Tomorrow's prep</label><input id="rpt-tmrw" placeholder="Confirmations needed..."></div>
-      <div class="rpt-field"><label>Supervisor name</label><input id="rpt-sig" value="${currentUser.name}"></div>
+      <div class="rpt-field"><label>Supervisor name</label><input id="rpt-sig" value="${currentUser.name}" readonly disabled style="background:#f0f0f0;cursor:not-allowed" title="Locked to your logged-in account"></div>
     </div>
     <button class="btn-gold" onclick="submitRpt()">📤 Submit to PMO</button>
     <div class="saved-box" id="saved-rpt"></div>
   </div>`;
 }
 async function submitRpt(){
-  const sig=document.getElementById('rpt-sig')?.value||currentUser.name;
+  const sig=currentUser.name; // always the actual logged-in account — never trust the field value alone, since a shared device's browser autofill could carry over a different name
   const count=document.getElementById('rpt-count')?.value||'';
   const acad=document.getElementById('rpt-acad')?.value||'';
   const act=document.getElementById('rpt-act')?.value||'';
