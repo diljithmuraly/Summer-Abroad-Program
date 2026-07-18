@@ -165,6 +165,24 @@ body{font-family:'DM Sans',sans-serif;background:var(--mist);color:var(--ink);mi
 .tbl tr:last-child td{border-bottom:none;}
 .tbl tr:hover td{background:rgba(45,138,82,0.04);}
 
+/* Responsive table -> stacked card layout on phone-width screens.
+   This is purely visual (CSS only) — every onclick handler, sort function,
+   filter, and checkbox still lives on the exact same DOM element it always
+   did, so nothing about how the app behaves changes; only how table rows
+   are laid out on a narrow screen. Cells opt in via a data-label attribute
+   that becomes the visible field label when stacked. */
+@media (max-width:760px){
+  table.tbl.mobile-cards, table.sch-tbl.mobile-cards{min-width:0!important;width:100%;}
+  table.tbl.mobile-cards thead, table.sch-tbl.mobile-cards thead{display:none;}
+  table.tbl.mobile-cards tbody, table.sch-tbl.mobile-cards tbody{display:block;}
+  table.tbl.mobile-cards tr, table.sch-tbl.mobile-cards tr{display:block;background:var(--white);border:1px solid var(--border);border-radius:9px;padding:9px 12px;margin-bottom:8px;}
+  table.tbl.mobile-cards tr:hover td, table.sch-tbl.mobile-cards tr:hover td{background:none!important;}
+  table.tbl.mobile-cards td, table.sch-tbl.mobile-cards td{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);text-align:right;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;max-width:none!important;}
+  table.tbl.mobile-cards td:last-child, table.sch-tbl.mobile-cards td:last-child{border-bottom:none;}
+  table.tbl.mobile-cards td[data-label]::before, table.sch-tbl.mobile-cards td[data-label]::before{content:attr(data-label);font-size:0.66rem;font-weight:600;color:var(--slate);text-transform:uppercase;letter-spacing:0.04em;text-align:left;flex-shrink:0;}
+  table.tbl.mobile-cards td:not([data-label]){justify-content:flex-start;}
+}
+
 .badge{display:inline-block;font-size:0.66rem;padding:2px 8px;border-radius:8px;font-weight:600;}
 .b-green{background:var(--green-pale);color:var(--green);}
 .b-amber{background:var(--amber-pale);color:var(--amber);}
@@ -854,16 +872,16 @@ function pgSchedule(){
   const days=d?(DB.itineraries&&DB.itineraries[d.id])||[]:[];
   if(!days.length){
     // fallback to the old generic single-day view when no real itinerary has been loaded yet
-    const rows=DB.schedule.map(s=>`<tr><td style="font-weight:600;color:var(--green);white-space:nowrap">${s.time}</td><td>${s.activity}</td><td><span class="badge ${SCHED_TYPES[s.type]||'b-gray'}">${s.type}</span></td></tr>`).join('');
+    const rows=DB.schedule.map(s=>`<tr><td data-label="Time" style="font-weight:600;color:var(--green);white-space:nowrap">${s.time}</td><td data-label="Activity">${s.activity}</td><td data-label="Type"><span class="badge ${SCHED_TYPES[s.type]||'b-gray'}">${s.type}</span></td></tr>`).join('');
     return `<div class="ph"><h1 data-i18n="title_today_schedule">📅 Today's Schedule</h1><p>${d?d.name:''} — full itinerary not uploaded yet, showing a sample day</p></div>
     <div class="card"><div class="ch" style="cursor:default"><span>🗓️</span><span class="ct">Sample day schedule</span></div>
-    <div class="cb" style="padding:0"><table class="sch-tbl"><thead><tr><th>Time</th><th>Activity</th><th>Type</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+    <div class="cb" style="padding:0"><table class="sch-tbl mobile-cards"><thead><tr><th>Time</th><th>Activity</th><th>Type</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
   }
   if(scheduleViewDay===null) scheduleViewDay=computeCurrentDayIndex(days);
   scheduleViewDay=Math.min(Math.max(scheduleViewDay,0),days.length-1);
   const day=days[scheduleViewDay];
   const dateLabel=new Date(day.date+'T00:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'2-digit',month:'short',year:'numeric'});
-  const rows=day.events.map(e=>`<tr><td style="font-weight:600;color:var(--green);white-space:nowrap">${e.time}</td><td>${e.activity}</td><td style="color:var(--slate);font-size:0.75rem">${e.remarks||''}</td></tr>`).join('');
+  const rows=day.events.map(e=>`<tr><td data-label="Time" style="font-weight:600;color:var(--green);white-space:nowrap">${e.time}</td><td data-label="Activity">${e.activity}</td><td data-label="Remarks" style="color:var(--slate);font-size:0.75rem">${e.remarks||''}</td></tr>`).join('');
   return `<div class="ph"><h1 data-i18n="title_schedule">📅 Schedule</h1><p>${d?d.name:''}</p></div>
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
     <button class="btn btn-sm" ${scheduleViewDay===0?'disabled':''} onclick="scheduleViewDay=${scheduleViewDay-1};renderMain()">← Previous day</button>
@@ -879,7 +897,7 @@ function pgSchedule(){
     <div class="sc"><div class="lbl">City</div><div class="val" style="font-size:1rem">${day.city||'—'}</div></div>
   </div>
   <div class="card"><div class="ch" style="cursor:default"><span>🗓️</span><span class="ct">Full day schedule</span></div>
-  <div class="cb" style="padding:0"><table class="sch-tbl"><thead><tr><th>Time</th><th>Activity</th><th>Remarks</th></tr></thead><tbody>${rows}</tbody></table></div>
+  <div class="cb" style="padding:0"><table class="sch-tbl mobile-cards"><thead><tr><th>Time</th><th>Activity</th><th>Remarks</th></tr></thead><tbody>${rows}</tbody></table></div>
   ${day.accommodation?`<div style="padding:9px 15px;font-size:0.76rem;color:var(--slate);border-top:1px solid var(--border);background:var(--mist)">🏨 ${day.accommodation}</div>`:''}
   </div>`;
 }
@@ -898,12 +916,12 @@ function renderItineraryFor(destId){
     </div></div>`;
   }
   const dayCards=days.map((day,i)=>{
-    const rows=day.events.map(e=>`<tr><td style="font-weight:600;color:var(--green);white-space:nowrap">${e.time}</td><td>${e.activity}</td><td style="color:var(--slate);font-size:0.75rem">${e.remarks||''}</td></tr>`).join('');
+    const rows=day.events.map(e=>`<tr><td data-label="Time" style="font-weight:600;color:var(--green);white-space:nowrap">${e.time}</td><td data-label="Activity">${e.activity}</td><td data-label="Remarks" style="color:var(--slate);font-size:0.75rem">${e.remarks||''}</td></tr>`).join('');
     const dateLabel=new Date(day.date+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
     return `<div class="card"><div class="ch" style="cursor:default">
       <span>📅</span><span class="ct">Day ${i+1} — ${day.day}, ${dateLabel} ${day.city?'· '+day.city:''}</span>
       </div>
-      <div class="cb" style="padding:0"><table class="sch-tbl"><thead><tr><th>Time</th><th>Activity</th><th>Remarks</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="cb" style="padding:0"><table class="sch-tbl mobile-cards"><thead><tr><th>Time</th><th>Activity</th><th>Remarks</th></tr></thead><tbody>${rows}</tbody></table></div>
       ${day.accommodation?`<div style="padding:9px 15px;font-size:0.76rem;color:var(--slate);border-top:1px solid var(--border);background:var(--mist)">🏨 ${day.accommodation}</div>`:''}
     </div>`;
   }).join('');
@@ -1382,47 +1400,95 @@ function pgIncidentsAdmin(){
   <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
     <button class="btn btn-primary" onclick="loadAllIncidentsForAdmin()">🔄 Refresh</button>
     <button class="btn" onclick="exportIncidentsCSV()">⬇ Export CSV</button>
+    <button class="btn btn-danger" id="inc-bulkdel-btn" onclick="bulkDeleteIncidents()" style="display:none">🗑 Delete Selected (<span id="inc-bulkdel-count">0</span>)</button>
     <select id="inc-admin-sev-filter" onchange="renderAdminIncidents()" style="padding:6px 11px;border:1px solid var(--border);border-radius:7px;font-size:0.8rem;font-family:inherit;">
       <option value="">All severities</option>
       <option value="low">Low</option><option value="med">Medium</option><option value="high">High</option><option value="critical">Critical</option>
     </select>
   </div>
-  <div class="card"><div class="ch" style="cursor:default"><span>📋</span><span class="ct">Incidents</span><span class="cbadge" id="inc-admin-count">Loading...</span></div>
-  <div class="cb" style="padding:0;overflow-x:auto">
-    <table class="sch-tbl" style="min-width:900px">
-      <thead><tr><th>Day</th><th>Destination</th><th>Severity</th><th>Type</th><th>Student</th><th>Description</th><th>Action Taken</th><th>Reported By</th><th>When</th></tr></thead>
-      <tbody id="inc-admin-tbody"><tr><td colspan="9" style="text-align:center;padding:20px;color:var(--slate)">Loading incidents...</td></tr></tbody>
-    </table>
-  </div></div>`;
+  <div class="card"><div class="ch" style="cursor:default;flex-wrap:wrap"><span>📋</span><span class="ct">Incidents</span><span class="cbadge" id="inc-admin-count">Loading...</span>
+    <label style="margin-left:auto;display:flex;align-items:center;gap:5px;font-size:0.74rem;font-weight:normal;color:var(--slate);cursor:pointer"><input type="checkbox" id="inc-select-all" onchange="toggleAllIncidents(this.checked)"> Select all</label>
+  </div>
+  <div class="cb" id="inc-admin-list" style="padding:12px 15px">Loading...</div></div>`;
 }
 async function loadAllIncidentsForAdmin(){
   try{
     adminIncidentsList=await supaFetch('incidents?select=*&order=created_at.desc');
+    selectedIncidentIds=new Set();
+    updateIncidentBulkDeleteBtn();
     renderAdminIncidents();
   }catch(e){
-    const tb=document.getElementById('inc-admin-tbody');
-    if(tb) tb.innerHTML=`<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--red)">Error loading incidents: ${e.message}</td></tr>`;
+    const el=document.getElementById('inc-admin-list');
+    if(el) el.innerHTML=`<div style="text-align:center;padding:20px;color:var(--red)">Error loading incidents: ${e.message}</div>`;
   }
 }
+let selectedIncidentIds=new Set();
 function renderAdminIncidents(){
-  const tb=document.getElementById('inc-admin-tbody');
-  if(!tb) return;
+  const el=document.getElementById('inc-admin-list');
+  if(!el) return;
   const sevFilter=document.getElementById('inc-admin-sev-filter')?.value||'';
   const list=sevFilter?adminIncidentsList.filter(r=>r.severity===sevFilter):adminIncidentsList;
   const badge=document.getElementById('inc-admin-count');
   if(badge) badge.textContent=list.length+' incidents';
-  if(!list.length){ tb.innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--slate)">No incidents reported yet.</td></tr>'; return; }
-  tb.innerHTML=list.map(r=>`<tr>
-    <td><span class="badge b-gray">${r.day||'—'}</span></td>
-    <td style="font-size:0.78rem">${r.destination||'—'}</td>
-    <td><span class="sev-badge sev-${r.severity}">${(r.severity||'').toUpperCase()}</span></td>
-    <td style="font-size:0.78rem">${r.type||'—'}</td>
-    <td style="font-size:0.78rem">${r.student_uid?`<span class="uid-badge">${r.student_uid}</span> ${r.student_name||''}`:'—'}</td>
-    <td style="font-size:0.76rem;max-width:220px">${r.description||'—'}</td>
-    <td style="font-size:0.76rem;color:var(--green);max-width:180px">${r.action_taken||'—'}</td>
-    <td style="font-size:0.76rem">${r.reported_by_name||'—'}${r.reported_by_role?` (${r.reported_by_role})`:''}</td>
-    <td style="font-size:0.72rem;color:var(--slate);white-space:nowrap">${r.created_at?new Date(r.created_at).toLocaleString():'—'}</td>
-  </tr>`).join('');
+  if(!list.length){ el.innerHTML='<div style="text-align:center;padding:20px;color:var(--slate)">No incidents reported yet.</div>'; return; }
+  el.innerHTML=list.map(r=>`<div style="background:var(--white);border:1px solid var(--border);border-radius:9px;padding:11px 13px;margin-bottom:8px">
+    <div style="display:flex;gap:10px;align-items:flex-start">
+      <input type="checkbox" class="inc-check" data-id="${r.id}" onchange="toggleIncidentSelect('${r.id}',this.checked)" ${selectedIncidentIds.has(String(r.id))?'checked':''} style="margin-top:3px;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:4px">
+          <span style="font-weight:600;font-size:0.85rem">${r.type||'—'}</span>
+          <span class="sev-badge sev-${r.severity}">${(r.severity||'').toUpperCase()}</span>
+          <span class="badge b-gray">${r.day||'—'}</span>
+        </div>
+        <div style="font-size:0.74rem;color:var(--slate);margin-bottom:4px">${r.destination||'—'} · ${r.created_at?new Date(r.created_at).toLocaleString():'—'}</div>
+        ${r.student_uid?`<div style="font-size:0.78rem;margin-bottom:4px"><span class="uid-badge">${r.student_uid}</span> ${r.student_name||''}</div>`:''}
+        <div style="font-size:0.8rem;margin-bottom:3px;word-break:break-word">${r.description||'—'}</div>
+        ${r.action_taken?`<div style="font-size:0.78rem;color:var(--green);margin-bottom:3px;word-break:break-word">✅ ${r.action_taken}</div>`:''}
+        <div style="font-size:0.7rem;color:var(--slate)">Reported by ${r.reported_by_name||'—'}${r.reported_by_role?` (${r.reported_by_role})`:''}</div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-sm btn-danger" onclick="deleteIncident('${r.id}')">🗑 Delete</button>
+    </div>
+  </div>`).join('');
+}
+function toggleAllIncidents(checked){
+  const sevFilter=document.getElementById('inc-admin-sev-filter')?.value||'';
+  const list=sevFilter?adminIncidentsList.filter(r=>r.severity===sevFilter):adminIncidentsList;
+  selectedIncidentIds=new Set(checked?list.map(r=>String(r.id)):[]);
+  document.querySelectorAll('.inc-check').forEach(cb=>cb.checked=checked);
+  updateIncidentBulkDeleteBtn();
+}
+function toggleIncidentSelect(id,checked){
+  if(checked) selectedIncidentIds.add(String(id)); else selectedIncidentIds.delete(String(id));
+  updateIncidentBulkDeleteBtn();
+}
+function updateIncidentBulkDeleteBtn(){
+  const btn=document.getElementById('inc-bulkdel-btn');
+  const cnt=document.getElementById('inc-bulkdel-count');
+  if(cnt) cnt.textContent=selectedIncidentIds.size;
+  if(btn) btn.style.display=selectedIncidentIds.size?'inline-flex':'none';
+}
+async function deleteIncident(id){
+  if(!confirm('Delete this incident permanently? This cannot be undone.')) return;
+  try{
+    await supaFetch('incidents?id=eq.'+id,'DELETE');
+    showToast('🗑 Incident deleted');
+    loadAllIncidentsForAdmin();
+  }catch(e){ showToast('❌ Error deleting: '+e.message); }
+}
+async function bulkDeleteIncidents(){
+  if(!selectedIncidentIds.size) return;
+  if(!confirm(`Delete ${selectedIncidentIds.size} incident(s) permanently? This cannot be undone.`)) return;
+  const btn=document.getElementById('inc-bulkdel-btn');
+  if(btn){btn.disabled=true;btn.textContent='Deleting...';}
+  let success=0,fail=0;
+  for(const id of selectedIncidentIds){
+    try{ await supaFetch('incidents?id=eq.'+id,'DELETE'); success++; }
+    catch(e){ fail++; }
+  }
+  showToast(`🗑 Deleted ${success} incident(s)${fail?`, ${fail} failed`:''}`);
+  loadAllIncidentsForAdmin();
 }
 function exportIncidentsCSV(){
   const sevFilter=document.getElementById('inc-admin-sev-filter')?.value||'';
@@ -1491,14 +1557,14 @@ function clearInc(){['inc-time','inc-uid','inc-desc','inc-action'].forEach(id=>{
 function pgVisaStatus(){
   const students=myStudents();
   const rows=students.map(s=>{const vd=visaData[s.id]||{status:'Not Started',comments:''};
-    return `<tr><td><div style="display:flex;align-items:center;gap:7px"><div class="mav" style="width:27px;height:27px;font-size:0.67rem">${getInitials(s)}</div><div><div style="font-size:0.82rem;font-weight:500">${s.name}</div><span class="uid-badge">${s.uid}</span></div></div></td>
-    <td><select class="visa-sel" onchange="updVisa('${s.id}',this.value)">${VISA_STATUSES.map(vs=>`<option ${(vd.status||'Not Started')===vs?'selected':''}>${vs}</option>`).join('')}</select></td>
-    <td><input style="width:170px;padding:4px 7px;border:1px solid var(--border);border-radius:5px;font-size:0.74rem;font-family:inherit" value="${vd.comments||''}" placeholder="Comment..." onchange="updVisaComment('${s.id}',this.value)"></td>
-    <td><span class="badge ${vd.status==='Approved'?'b-green':vd.status==='Rejected'?'b-red':vd.status==='Not Started'?'b-gray':'b-amber'}">${vd.status||'Not Started'}</span></td></tr>`;
+    return `<tr><td data-label="Student"><div style="display:flex;align-items:center;gap:7px"><div class="mav" style="width:27px;height:27px;font-size:0.67rem">${getInitials(s)}</div><div><div style="font-size:0.82rem;font-weight:500">${s.name}</div><span class="uid-badge">${s.uid}</span></div></div></td>
+    <td data-label="Update Status"><select class="visa-sel" onchange="updVisa('${s.id}',this.value)">${VISA_STATUSES.map(vs=>`<option ${(vd.status||'Not Started')===vs?'selected':''}>${vs}</option>`).join('')}</select></td>
+    <td data-label="Comments"><input style="width:170px;max-width:55vw;padding:4px 7px;border:1px solid var(--border);border-radius:5px;font-size:0.74rem;font-family:inherit" value="${vd.comments||''}" placeholder="Comment..." onchange="updVisaComment('${s.id}',this.value)"></td>
+    <td data-label="Current"><span class="badge ${vd.status==='Approved'?'b-green':vd.status==='Rejected'?'b-red':vd.status==='Not Started'?'b-gray':'b-amber'}">${vd.status||'Not Started'}</span></td></tr>`;
   }).join('');
   return `<div class="ph"><h1 data-i18n="title_visastatus">🪪 Visa Status</h1><p>Individual visa tracking for your group</p></div>
   <div class="card"><div class="ch" style="cursor:default"><span>🪪</span><span class="ct">Student visa status</span></div>
-  <div class="cb" style="padding:0"><table class="tbl"><thead><tr><th>Student</th><th>Update Status</th><th>Comments</th><th>Current</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  <div class="cb" style="padding:0"><table class="tbl mobile-cards"><thead><tr><th>Student</th><th>Update Status</th><th>Comments</th><th>Current</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function updVisa(uid,val){if(!visaData[uid])visaData[uid]={status:'Not Started',comments:''};visaData[uid].status=val;showToast('Visa → '+val);}
 function updVisaComment(uid,val){if(!visaData[uid])visaData[uid]={status:'Not Started',comments:''};visaData[uid].comments=val;showToast('Comment saved');}
@@ -1627,8 +1693,8 @@ function pgTeams(){
   const dests=visibleDestinations();
   return `<div class="ph"><h1 data-i18n="title_teams">👥 All Teams</h1></div>
   <div class="card"><div class="ch" style="cursor:default"><span>👥</span><span class="ct">Supervisors & groups</span></div>
-  <div class="cb" style="padding:0"><table class="tbl"><thead><tr><th>Destination</th><th>Supervisor</th><th>Students</th><th>Status</th></tr></thead><tbody>
-  ${dests.map(d=>{const sup=USERS.find(u=>u.role==='supervisor'&&u.destId===d.id);return `<tr><td>${d.flag} ${d.name}</td><td>${sup?sup.name:'—'}</td><td>${destStudents(d.id).length}</td><td><span class="badge b-green">Active</span></td></tr>`;}).join('')}
+  <div class="cb" style="padding:0"><table class="tbl mobile-cards"><thead><tr><th>Destination</th><th>Supervisor</th><th>Students</th><th>Status</th></tr></thead><tbody>
+  ${dests.map(d=>{const sup=USERS.find(u=>u.role==='supervisor'&&u.destId===d.id);return `<tr><td data-label="Destination">${d.flag} ${d.name}</td><td data-label="Supervisor">${sup?sup.name:'—'}</td><td data-label="Students">${destStudents(d.id).length}</td><td data-label="Status"><span class="badge b-green">Active</span></td></tr>`;}).join('')}
   </tbody></table></div></div>`;
 }
 
@@ -1636,10 +1702,10 @@ function pgFlights(){
   const dests=visibleDestinations();
   return `<div class="ph"><h1 data-i18n="title_flights">✈️ Flight Status</h1></div>
   <div class="card"><div class="ch" style="cursor:default"><span>✈️</span><span class="ct">All group flights</span></div>
-  <div class="cb" style="padding:0;overflow-x:auto"><table class="tbl"><thead><tr><th>Destination</th><th>Flight</th><th>Departure</th><th>Arrival</th><th>Status</th></tr></thead><tbody>
-  ${dests.map(d=>`<tr><td>${d.flag} ${d.name}</td><td>${d.flightNo}</td>
-    <td>${d.departureAirport} → ${d.departure}</td><td>${d.arrivalAirport} → ${d.arrival}</td>
-    <td><select class="sel-status" onchange="updFlight(${d.id},this.value)">
+  <div class="cb" style="padding:0;overflow-x:auto"><table class="tbl mobile-cards"><thead><tr><th>Destination</th><th>Flight</th><th>Departure</th><th>Arrival</th><th>Status</th></tr></thead><tbody>
+  ${dests.map(d=>`<tr><td data-label="Destination">${d.flag} ${d.name}</td><td data-label="Flight">${d.flightNo}</td>
+    <td data-label="Departure">${d.departureAirport} → ${d.departure}</td><td data-label="Arrival">${d.arrivalAirport} → ${d.arrival}</td>
+    <td data-label="Status"><select class="sel-status" onchange="updFlight(${d.id},this.value)">
       <option ${d.flightStatus==='Confirmed'?'selected':''}>Confirmed</option>
       <option ${d.flightStatus==='Pending'?'selected':''}>Pending</option>
       <option ${d.flightStatus==='Delayed'?'selected':''}>Delayed</option>
@@ -1658,15 +1724,15 @@ function pgVisasAll(){
   </div>`).join('');
   const studs=destStudents(selectedDest);const d=DB.destinations.find(x=>x.id===selectedDest);
   const rows=studs.map(s=>{const vd=visaData[s.id]||{status:'Not Started',comments:''};
-    return `<tr><td><span class="uid-badge">${s.uid}</span> ${s.name}</td>
-    <td><select class="visa-sel" onchange="updVisa('${s.id}',this.value)">${VISA_STATUSES.map(vs=>`<option ${(vd.status||'Not Started')===vs?'selected':''}>${vs}</option>`).join('')}</select></td>
-    <td><input style="width:150px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:0.72rem;font-family:inherit" value="${vd.comments||''}" placeholder="Comment..." onchange="updVisaComment('${s.id}',this.value)"></td>
-    <td><span class="badge ${(vd.status||'')=='Approved'?'b-green':(vd.status||'')==='Rejected'?'b-red':'b-amber'}">${vd.status||'Not Started'}</span></td></tr>`;
+    return `<tr><td data-label="Student"><span class="uid-badge">${s.uid}</span> ${s.name}</td>
+    <td data-label="Update"><select class="visa-sel" onchange="updVisa('${s.id}',this.value)">${VISA_STATUSES.map(vs=>`<option ${(vd.status||'Not Started')===vs?'selected':''}>${vs}</option>`).join('')}</select></td>
+    <td data-label="Comment"><input style="width:150px;max-width:55vw;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:0.72rem;font-family:inherit" value="${vd.comments||''}" placeholder="Comment..." onchange="updVisaComment('${s.id}',this.value)"></td>
+    <td data-label="Status"><span class="badge ${(vd.status||'')=='Approved'?'b-green':(vd.status||'')==='Rejected'?'b-red':'b-amber'}">${vd.status||'Not Started'}</span></td></tr>`;
   }).join('');
   return `<div class="ph"><h1 data-i18n="title_visasall">🪪 Visa Overview</h1></div>
   <div class="dest-grid">${dCards}</div>
   <div class="card"><div class="ch" style="cursor:default"><span>${d?d.flag:''}</span><span class="ct">${d?d.name+' — ':''} Visa Details</span></div>
-  <div class="cb" style="padding:0"><table class="tbl"><thead><tr><th>Student</th><th>Update</th><th>Comment</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  <div class="cb" style="padding:0"><table class="tbl mobile-cards"><thead><tr><th>Student</th><th>Update</th><th>Comment</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
 function pgSupervisors(){
@@ -1850,18 +1916,18 @@ function pgMembers(){
   </div>
   <div class="section-pills">${pills}</div>
   <div class="card"><div class="ch" style="cursor:default"><span>👥</span><span class="ct">Members (${filtered.length})</span></div>
-  <div class="cb" style="padding:0;overflow-x:auto"><table class="tbl" style="table-layout:fixed;width:100%;min-width:800px">
+  <div class="cb" style="padding:0;overflow-x:auto"><table class="tbl mobile-cards" style="table-layout:fixed;width:100%;min-width:800px">
     <thead><tr><th style="width:26px"><input type="checkbox" id="mem-select-all" onchange="toggleAllMembers(this.checked)"></th>${sortTh('name','Name','22%')}${sortTh('uid','UID','12%')}${sortTh('username','Username','12%')}${sortTh('destination','Destination','15%')}${sortTh('role','Role','9%')}<th style="width:9%">Password</th><th style="width:15%">Actions</th></tr></thead>
     <tbody id="mem-tbody">${filtered.map(u=>{const d=u.destId?DB.destinations.find(x=>x.id===u.destId):null;
       return `<tr>
         <td><input type="checkbox" class="mem-row-cb" data-id="${u.id}" ${selectedMemberIds.has(u.id)?'checked':''} onchange="toggleMemberSelect('${u.id}',this.checked)"></td>
-        <td><div style="display:flex;align-items:center;gap:6px"><div class="mav" style="width:25px;height:25px;font-size:0.64rem">${getInitials(u)}</div><span style="font-size:0.79rem">${u.name}</span></div></td>
-        <td><span class="uid-badge">${u.uid||'—'}</span></td>
-        <td style="font-size:0.74rem;font-family:monospace">${u.username}</td>
-        <td style="font-size:0.74rem">${d?d.flag+' '+d.name:'—'}</td>
-        <td><span class="badge ${u.role==='supervisor'?'b-blue':u.role==='admin'?'b-red':u.role==='pm'?'b-purple':'b-gray'}">${u.role==='pm'?'Calista PMO':u.role==='admin'?'Super Admin':u.role==='supervisor'?(u.teamLead?'👑 Team Lead':'Supervisor'):'Student'}</span></td>
-        <td style="font-size:0.72rem;font-family:monospace">${u.password}</td>
-        <td><div style="display:flex;gap:3px">
+        <td data-label="Name"><div style="display:flex;align-items:center;gap:6px"><div class="mav" style="width:25px;height:25px;font-size:0.64rem">${getInitials(u)}</div><span style="font-size:0.79rem">${u.name}</span></div></td>
+        <td data-label="UID"><span class="uid-badge">${u.uid||'—'}</span></td>
+        <td data-label="Username" style="font-size:0.74rem;font-family:monospace">${u.username}</td>
+        <td data-label="Destination" style="font-size:0.74rem">${d?d.flag+' '+d.name:'—'}</td>
+        <td data-label="Role"><span class="badge ${u.role==='supervisor'?'b-blue':u.role==='admin'?'b-red':u.role==='pm'?'b-purple':'b-gray'}">${u.role==='pm'?'Calista PMO':u.role==='admin'?'Super Admin':u.role==='supervisor'?(u.teamLead?'👑 Team Lead':'Supervisor'):'Student'}</span></td>
+        <td data-label="Password" style="font-size:0.72rem;font-family:monospace">${u.password}</td>
+        <td data-label="Actions"><div style="display:flex;gap:3px">
           <button class="btn btn-sm" onclick="openEditMember('${u.id}')">✏️</button>
           <button class="btn btn-sm btn-danger" onclick="deleteMember('${u.id}')">🗑</button>
         </div></td>
@@ -2152,17 +2218,17 @@ async function deleteMember(id){
 function pgFlightsVisa(){
   return `<div class="ph"><h1 data-i18n="title_flightsvisaall">✈️ Flights & Visas</h1></div>
   <div class="card"><div class="ch" style="cursor:default"><span>✈️</span><span class="ct">All group flights & visa</span></div>
-  <div class="cb" style="padding:0;overflow-x:auto"><table class="tbl"><thead><tr><th>Dest</th><th>Flight</th><th>Dep AP</th><th>Departure</th><th>Arr AP</th><th>Arrival</th><th>Flight</th><th>Visa</th><th></th></tr></thead><tbody>
+  <div class="cb" style="padding:0;overflow-x:auto"><table class="tbl mobile-cards"><thead><tr><th>Dest</th><th>Flight</th><th>Dep AP</th><th>Departure</th><th>Arr AP</th><th>Arrival</th><th>Flight</th><th>Visa</th><th></th></tr></thead><tbody>
   ${DB.destinations.map(d=>`<tr>
-    <td>${d.flag} ${d.name}</td>
-    <td><input style="width:68px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:0.72rem;font-family:inherit" value="${d.flightNo}" onchange="updDestF(${d.id},'flightNo',this.value)"></td>
-    <td><input style="width:50px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:0.72rem;font-family:inherit" value="${d.departureAirport}" onchange="updDestF(${d.id},'departureAirport',this.value)"></td>
-    <td><input style="width:105px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:0.72rem;font-family:inherit" value="${d.departure}" onchange="updDestF(${d.id},'departure',this.value)"></td>
-    <td><input style="width:50px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:0.72rem;font-family:inherit" value="${d.arrivalAirport}" onchange="updDestF(${d.id},'arrivalAirport',this.value)"></td>
-    <td><input style="width:115px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:0.72rem;font-family:inherit" value="${d.arrival}" onchange="updDestF(${d.id},'arrival',this.value)"></td>
-    <td><select class="sel-status" onchange="updFlight(${d.id},this.value)"><option ${d.flightStatus==='Confirmed'?'selected':''}>Confirmed</option><option ${d.flightStatus==='Pending'?'selected':''}>Pending</option><option ${d.flightStatus==='Delayed'?'selected':''}>Delayed</option><option ${d.flightStatus==='Cancelled'?'selected':''}>Cancelled</option></select></td>
-    <td><select class="sel-status" onchange="updDestF(${d.id},'visaStatus',this.value)"><option ${d.visaStatus==='Approved'?'selected':''}>Approved</option><option ${d.visaStatus==='In Progress'?'selected':''}>In Progress</option><option ${d.visaStatus==='Pending'?'selected':''}>Pending</option><option ${d.visaStatus==='Rejected'?'selected':''}>Rejected</option></select></td>
-    <td><button class="btn btn-sm btn-primary" onclick="openEditDestModal(${d.id})">✏️</button></td>
+    <td data-label="Destination">${d.flag} ${d.name}</td>
+    <td data-label="Flight No."><input style="width:68px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:0.72rem;font-family:inherit" value="${d.flightNo}" onchange="updDestF(${d.id},'flightNo',this.value)"></td>
+    <td data-label="Dep Airport"><input style="width:50px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:0.72rem;font-family:inherit" value="${d.departureAirport}" onchange="updDestF(${d.id},'departureAirport',this.value)"></td>
+    <td data-label="Departure"><input style="width:105px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:0.72rem;font-family:inherit" value="${d.departure}" onchange="updDestF(${d.id},'departure',this.value)"></td>
+    <td data-label="Arr Airport"><input style="width:50px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:0.72rem;font-family:inherit" value="${d.arrivalAirport}" onchange="updDestF(${d.id},'arrivalAirport',this.value)"></td>
+    <td data-label="Arrival"><input style="width:115px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:0.72rem;font-family:inherit" value="${d.arrival}" onchange="updDestF(${d.id},'arrival',this.value)"></td>
+    <td data-label="Flight Status"><select class="sel-status" onchange="updFlight(${d.id},this.value)"><option ${d.flightStatus==='Confirmed'?'selected':''}>Confirmed</option><option ${d.flightStatus==='Pending'?'selected':''}>Pending</option><option ${d.flightStatus==='Delayed'?'selected':''}>Delayed</option><option ${d.flightStatus==='Cancelled'?'selected':''}>Cancelled</option></select></td>
+    <td data-label="Visa Status"><select class="sel-status" onchange="updDestF(${d.id},'visaStatus',this.value)"><option ${d.visaStatus==='Approved'?'selected':''}>Approved</option><option ${d.visaStatus==='In Progress'?'selected':''}>In Progress</option><option ${d.visaStatus==='Pending'?'selected':''}>Pending</option><option ${d.visaStatus==='Rejected'?'selected':''}>Rejected</option></select></td>
+    <td data-label="Edit"><button class="btn btn-sm btn-primary" onclick="openEditDestModal(${d.id})">✏️</button></td>
   </tr>`).join('')}</tbody></table></div></div>`;
 }
 function updDestF(id,f,val){const d=DB.destinations.find(x=>x.id===id);if(d){d[f]=val;showToast('Updated');}}
@@ -2250,10 +2316,11 @@ function pgFeedbackAdmin(){
     <div style="font-size:0.75rem;color:var(--slate);margin-bottom:8px">This is what supervisors will see on each student row. Click any tag right here to rename, switch positive/negative, or delete it — then click 💾 Save Changes above to make it live.</div>
     <div>${preview}</div>
   </div></div>
-  <div class="card" style="margin-top:6px"><div class="ch" style="cursor:default"><span>📋</span><span class="ct">Submitted student feedback</span><span class="cbadge" id="fb-admin-count">Loading...</span>
+  <div class="card" style="margin-top:6px"><div class="ch" style="cursor:default;flex-wrap:wrap"><span>📋</span><span class="ct">Submitted student feedback</span><span class="cbadge" id="fb-admin-count">Loading...</span>
     <button class="btn btn-sm" onclick="exportFeedbackCSV()" style="margin-left:8px">⬇ Export CSV</button>
+    <button class="btn btn-sm btn-danger" id="fb-bulkdel-btn" onclick="bulkDeleteFeedback()" style="display:none">🗑 Delete Selected (<span id="fb-bulkdel-count">0</span>)</button>
   </div>
-  <div class="cb" style="padding:12px 16px 0;display:flex;gap:8px;flex-wrap:wrap">
+  <div class="cb" style="padding:12px 16px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <select id="fb-admin-dest-filter" onchange="renderFeedbackAdminTable()" style="padding:6px 11px;border:1px solid var(--border);border-radius:7px;font-size:0.8rem;font-family:inherit">
       <option value="">All destinations</option>
       ${DB.destinations.map(d=>`<option value="${d.id}">${d.flag} ${d.name}</option>`).join('')}
@@ -2262,26 +2329,24 @@ function pgFeedbackAdmin(){
       <option value="">All days</option>
       ${ALL_DAYS.map(dy=>`<option value="${dy}">${dy}</option>`).join('')}
     </select>
+    <label style="margin-left:auto;display:flex;align-items:center;gap:5px;font-size:0.74rem;color:var(--slate);cursor:pointer"><input type="checkbox" id="fb-select-all" onchange="toggleAllFeedback(this.checked)"> Select all</label>
   </div>
-  <div class="cb" style="padding:0;overflow-x:auto">
-    <table class="sch-tbl" style="min-width:800px">
-      <thead><tr><th>Day</th><th>Destination</th><th>Supervisor</th><th>Students flagged</th><th>Submitted</th><th></th></tr></thead>
-      <tbody id="fb-admin-tbody"><tr><td colspan="6" style="text-align:center;padding:20px;color:var(--slate)">Loading submitted feedback...</td></tr></tbody>
-    </table>
-  </div></div>
+  <div class="cb" id="fb-admin-list">Loading submitted feedback...</div></div>
   ${renderMilestonePopupPanel()}`;
 }
 let adminFeedbackList=[];
 async function loadSubmittedFeedbackForAdmin(){
   try{
     adminFeedbackList=await supaFetch('daily_feedback?select=*&order=day.desc');
+    selectedFeedbackIds=new Set();
+    updateFeedbackBulkDeleteBtn();
     renderFeedbackAdminTable();
   }catch(e){
-    const tb=document.getElementById('fb-admin-tbody');
-    if(tb) tb.innerHTML=`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--red)">Error loading feedback: ${e.message}</td></tr>`;
+    const el=document.getElementById('fb-admin-list');
+    if(el) el.innerHTML=`<div style="text-align:center;padding:20px;color:var(--red)">Error loading feedback: ${e.message}</div>`;
   }
 }
-// Applies the destination + day filters — used by both the on-screen table
+// Applies the destination + day filters — used by both the on-screen list
 // and the CSV export, so what you see is always what you download. This
 // matters once every cohort and every day's feedback is in the system at
 // once, rather than just a handful of test rows.
@@ -2291,27 +2356,74 @@ function getFilteredAdminFeedback(){
   const destName=destId?DB.destinations.find(d=>d.id===parseInt(destId))?.name:null;
   return (adminFeedbackList||[]).filter(r=>(!destName||r.destination===destName)&&(!day||r.day===day));
 }
+let selectedFeedbackIds=new Set();
 function renderFeedbackAdminTable(){
-  const tb=document.getElementById('fb-admin-tbody');
+  const el=document.getElementById('fb-admin-list');
   const badge=document.getElementById('fb-admin-count');
   const list=getFilteredAdminFeedback();
   if(badge) badge.textContent=list.length+' of '+(adminFeedbackList||[]).length+' submissions';
-  if(!tb) return;
-  if(!list.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--slate)">No feedback matches this filter.</td></tr>'; return; }
-  tb.innerHTML=list.map(r=>{
+  if(!el) return;
+  if(!list.length){ el.innerHTML='<div style="text-align:center;padding:20px;color:var(--slate)">No feedback matches this filter.</div>'; return; }
+  el.innerHTML=list.map(r=>{
     let summary={};
     try{ summary=JSON.parse(r.feedback||'{}'); }catch(e){}
     const flaggedCount=Object.keys(summary).length;
     const when=r.submitted_at||r.created_at;
-    return `<tr>
-      <td><span class="badge b-gray">${r.day||'—'}</span></td>
-      <td style="font-size:0.78rem">${r.destination||'—'}</td>
-      <td style="font-size:0.78rem">${r.supervisor_name||'—'}</td>
-      <td style="font-size:0.78rem">${flaggedCount}</td>
-      <td style="font-size:0.72rem;color:var(--slate);white-space:nowrap">${when?new Date(when).toLocaleString():'—'}</td>
-      <td><button class="btn btn-sm" onclick="viewSubmittedFeedback('${r.id}')">👁 View</button></td>
-    </tr>`;
+    return `<div style="background:var(--white);border:1px solid var(--border);border-radius:9px;padding:11px 13px;margin-bottom:8px">
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <input type="checkbox" class="fb-check" data-id="${r.id}" onchange="toggleFeedbackSelect('${r.id}',this.checked)" ${selectedFeedbackIds.has(String(r.id))?'checked':''} style="margin-top:3px;flex-shrink:0">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:4px">
+            <span class="badge b-gray">${r.day||'—'}</span>
+            <span style="font-size:0.82rem;font-weight:600">${r.destination||'—'}</span>
+          </div>
+          <div style="font-size:0.76rem;color:var(--slate)">Supervisor: ${r.supervisor_name||'—'} · ${flaggedCount} student(s) flagged</div>
+          <div style="font-size:0.7rem;color:var(--slate)">${when?new Date(when).toLocaleString():'—'}</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:8px">
+        <button class="btn btn-sm" onclick="viewSubmittedFeedback('${r.id}')">👁 View</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteFeedback('${r.id}')">🗑 Delete</button>
+      </div>
+    </div>`;
   }).join('');
+}
+function toggleAllFeedback(checked){
+  const list=getFilteredAdminFeedback();
+  selectedFeedbackIds=new Set(checked?list.map(r=>String(r.id)):[]);
+  document.querySelectorAll('.fb-check').forEach(cb=>cb.checked=checked);
+  updateFeedbackBulkDeleteBtn();
+}
+function toggleFeedbackSelect(id,checked){
+  if(checked) selectedFeedbackIds.add(String(id)); else selectedFeedbackIds.delete(String(id));
+  updateFeedbackBulkDeleteBtn();
+}
+function updateFeedbackBulkDeleteBtn(){
+  const btn=document.getElementById('fb-bulkdel-btn');
+  const cnt=document.getElementById('fb-bulkdel-count');
+  if(cnt) cnt.textContent=selectedFeedbackIds.size;
+  if(btn) btn.style.display=selectedFeedbackIds.size?'inline-flex':'none';
+}
+async function deleteFeedback(id){
+  if(!confirm('Delete this feedback submission permanently? This cannot be undone.')) return;
+  try{
+    await supaFetch('daily_feedback?id=eq.'+id,'DELETE');
+    showToast('🗑 Feedback deleted');
+    loadSubmittedFeedbackForAdmin();
+  }catch(e){ showToast('❌ Error deleting: '+e.message); }
+}
+async function bulkDeleteFeedback(){
+  if(!selectedFeedbackIds.size) return;
+  if(!confirm(`Delete ${selectedFeedbackIds.size} feedback submission(s) permanently? This cannot be undone.`)) return;
+  const btn=document.getElementById('fb-bulkdel-btn');
+  if(btn){btn.disabled=true;btn.textContent='Deleting...';}
+  let success=0,fail=0;
+  for(const id of selectedFeedbackIds){
+    try{ await supaFetch('daily_feedback?id=eq.'+id,'DELETE'); success++; }
+    catch(e){ fail++; }
+  }
+  showToast(`🗑 Deleted ${success} submission(s)${fail?`, ${fail} failed`:''}`);
+  loadSubmittedFeedbackForAdmin();
 }
 function exportFeedbackCSV(){
   const list=getFilteredAdminFeedback();
@@ -2656,7 +2768,7 @@ function pgReports(){
   </div>
   <div class="card"><div class="ch" style="cursor:default"><span>📋</span><span class="ct">Submitted Reports</span><span class="cbadge" id="rpt-count-badge">Loading...</span></div>
   <div class="cb" style="padding:0;overflow-x:auto">
-    <table class="sch-tbl" style="min-width:850px">
+    <table class="sch-tbl mobile-cards" style="min-width:850px">
       <thead><tr><th style="width:26px"><input type="checkbox" id="rpt-select-all" onchange="toggleAllReports(this.checked)"></th><th>Supervisor</th><th>Destination</th><th>Day</th><th>Students</th><th>Report Notes (incidents)</th><th>Submitted</th><th></th></tr></thead>
       <tbody id="rpt-tbody"><tr><td colspan="8" style="text-align:center;padding:20px;color:var(--slate)">Loading reports...</td></tr></tbody>
     </table>
@@ -2771,13 +2883,13 @@ function renderReportsTable(list){
   if(!list.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--slate)">No reports submitted yet.</td></tr>';return;}
   tb.innerHTML=list.map(r=>`<tr>
     <td><input type="checkbox" class="rpt-check" data-id="${r.id}" onchange="toggleReportSelect('${r.id}',this.checked)" ${selectedReportIds.has(String(r.id))?'checked':''}></td>
-    <td style="font-weight:600">${r.supervisor_name}</td>
-    <td>${r.destination||'—'}</td>
-    <td><span class="badge b-gray">${r.day}</span></td>
-    <td style="font-size:0.78rem">${r.student_count||'—'}</td>
-    <td style="font-size:0.78rem;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.incidents||'None'}</td>
-    <td style="font-size:0.75rem;color:var(--slate)">${new Date(r.submitted_at).toLocaleString()}</td>
-    <td style="display:flex;gap:4px"><button class="btn btn-sm" onclick="viewReport('${r.id}')">👁 View</button><button class="btn btn-sm btn-danger" onclick="deleteReport('${r.id}')">🗑</button></td>
+    <td data-label="Supervisor" style="font-weight:600">${r.supervisor_name}</td>
+    <td data-label="Destination">${r.destination||'—'}</td>
+    <td data-label="Day"><span class="badge b-gray">${r.day}</span></td>
+    <td data-label="Students" style="font-size:0.78rem">${r.student_count||'—'}</td>
+    <td data-label="Report Notes" style="font-size:0.78rem;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.incidents||'None'}</td>
+    <td data-label="Submitted" style="font-size:0.75rem;color:var(--slate)">${new Date(r.submitted_at).toLocaleString()}</td>
+    <td data-label="Actions" style="display:flex;gap:4px"><button class="btn btn-sm" onclick="viewReport('${r.id}')">👁 View</button><button class="btn btn-sm btn-danger" onclick="deleteReport('${r.id}')">🗑</button></td>
   </tr>`).join('');
 }
 function toggleAllReports(checked){
@@ -2924,7 +3036,7 @@ function pgStudents(){
   </div>
   <div class="card"><div class="ch" style="cursor:default"><span>👥</span><span class="ct">All Students</span><span class="cbadge" id="stu-count">Loading...</span></div>
   <div class="cb" style="padding:0;overflow-x:auto">
-    <table class="sch-tbl" style="min-width:820px">
+    <table class="sch-tbl mobile-cards" style="min-width:820px">
       <thead><tr><th style="width:30px"><input type="checkbox" id="stu-select-all" onchange="toggleAllStudents(this.checked)"></th>${sortTh('serial','#')}${sortTh('name','Name')}${sortTh('cohort','Cohort')}${sortTh('passport_number','Passport No.')}${sortTh('emirates_id','Emirates ID')}${sortTh('phone','Phone')}${sortTh('email','Email')}${sortTh('school_name','School')}<th>Docs</th><th></th></tr></thead>
       <tbody id="stu-tbody"><tr><td colspan="11" style="text-align:center;padding:20px;color:var(--slate)">Loading students...</td></tr></tbody>
     </table>
@@ -3036,16 +3148,16 @@ function renderStudentTable(list){
     const hasPhoto=docs.photograph?'✅':'❌';
     return `<tr>
       <td><input type="checkbox" class="stu-row-cb" data-id="${s.id}" ${selectedStudentIds.has(s.id)?'checked':''} onchange="toggleStudentSelect('${s.id}',this.checked)"></td>
-      <td style="font-size:0.78rem;color:var(--slate)">${stuCohortSerial.get(s.id)||'—'}</td>
-      <td style="font-weight:600">${s.name}</td>
-      <td style="font-size:0.78rem;white-space:nowrap">${destNameById(s.destination_id)}</td>
-      <td style="font-family:monospace;font-size:0.78rem">${s.passport_number||'—'}</td>
-      <td style="font-family:monospace;font-size:0.78rem">${s.emirates_id||'—'}</td>
-      <td>${s.phone||'—'}</td>
-      <td style="font-size:0.78rem">${s.email||'—'}</td>
-      <td>${s.school_name||'—'}</td>
-      <td style="font-size:0.78rem;white-space:nowrap">🛂${hasPassport} 🛂${hasVisa} 📷${hasPhoto}</td>
-      <td><div style="display:flex;gap:4px">
+      <td data-label="#" style="font-size:0.78rem;color:var(--slate)">${stuCohortSerial.get(s.id)||'—'}</td>
+      <td data-label="Name" style="font-weight:600">${s.name}</td>
+      <td data-label="Cohort" style="font-size:0.78rem;white-space:nowrap">${destNameById(s.destination_id)}</td>
+      <td data-label="Passport No." style="font-family:monospace;font-size:0.78rem">${s.passport_number||'—'}</td>
+      <td data-label="Emirates ID" style="font-family:monospace;font-size:0.78rem">${s.emirates_id||'—'}</td>
+      <td data-label="Phone">${s.phone||'—'}</td>
+      <td data-label="Email" style="font-size:0.78rem">${s.email||'—'}</td>
+      <td data-label="School">${s.school_name||'—'}</td>
+      <td data-label="Docs" style="font-size:0.78rem;white-space:nowrap">🛂${hasPassport} 🛂${hasVisa} 📷${hasPhoto}</td>
+      <td data-label="Actions"><div style="display:flex;gap:4px">
         <button class="btn btn-sm" onclick="openViewStudentModal('${s.id}')">👁</button>
         <button class="btn btn-sm" onclick="openEditStudentModal('${s.id}')">✏️</button>
         <button class="btn btn-sm btn-danger" onclick="deleteStudent('${s.id}')">🗑</button>
